@@ -56,4 +56,7 @@ MAIN 	PROC 	NEAR
       MOV DH, SCREEN_MAX_ROWS/2
       MOV DL, SCREEN_MAX_COLS/2
 
-    
+    MAIN LOOP:
+
+      C
+
