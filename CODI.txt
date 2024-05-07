@@ -14,6 +14,7 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 ; JUGADOR 1
     ASCII_LEFT          EQU 04Bh 
     ASCII_RIGHT         EQU 04Dh
+    ASCII_QUIT          EQU 070h ; 'p'
 ; JUGADOR 2
     ASCII_a              EQU 061h    ; VA CAP A L'ESQUERRA AMB LA 'a'
     ASCII_d              EQU 064h    ; VA CAP A LA DRETA AMB LA 'd'
@@ -21,7 +22,17 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 
 ; ASCII / ATRR CODES PER PINTAR LA BARRA DE JUGADOR 1
     ASCII_BARRA1        EQU 020h ; 020h es l'espai en blanc en hexadecimal del codi ascii per fer la barra 
+    ATTR_BARRA1         EQU 070h ; Asignem el color de la barra 
+    ASCII_BARRA2        EQU 020h
+    ATTR_BARRA2         EQU 007h
 
+; ASCII / ATTR CODES PER PINTAR LA PILOTA
+    ASCII_BALL      EQU 02Ah ;EL SIMBOL DE LA PILOTA SERA UN '*'
+    ATTR_BALL       EQU 0E0h 
+
+; ASCII / ATTR CODES PER PINTAR ELS BLOCS DESTRUIBLES
+    ASCII_BRICK     EQU 05Fh
+    ATTR_BRICK      EQU 0E0h
 
 ; ASCII / ATTR PER PINTAR ELS LÍMITS DEL CAMP
     ASCII_FIELD         EQU 020h
@@ -87,8 +98,1348 @@ MAIN 	PROC 	NEAR
 
       ;Començar el joc
       MOV [START_GAME], TRUE
+
+       CMP AL, OR ASCII_RIGHT ; Es compara si es prem X tecles
+      JZ RIGHT_KEY1
+      CMP AL, ASCII_LEFT
+      JZ LEFT_KEY2
+      CMP AL, ASCII_a
+      JZ LEFT_KEY2
+      CMP AL, ASCII_d
+      JZ RIGHT_KEY2
+
+      JMP MAIN_LOOP
+
+  RIGHT_KEY1: ;Funció per moure la barra del jugador 1 a la dreta
+      MOV [INC_COL], 1
+      MOV [INC_ROW], 0
+      JMP END_KEY
+
+MAIN ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Set screen to mode 3 (80x25, color) and 
+; clears the screen
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   Screen size: SCREEN_MAX_ROWS, SCREEN_MAX_COLS
+; Calls:
+;   int 10h, service AH=0
+;   int 10h, service AH=6
+; ****************************************
+PUBLIC INIT_SCREEN
+INIT_SCREEN	PROC NEAR
+
+      PUSH AX
+      PUSH BX
+      PUSH CX
+      PUSH DX
+
+      ; Set screen mode
+      MOV AL,3
+      MOV AH,0
+      INT 10h
+
+      ; Clear screen
+      XOR AL, AL
+      XOR CX, CX
+      MOV DH, SCREEN_MAX_ROWS
+      MOV DL, SCREEN_MAX_COLS
+      MOV BH, 7
+      MOV AH, 6
+      INT 10h
+      
+      POP DX      
+      POP CX      
+      POP BX      
+      POP AX      
+	RET
+
+INIT_SCREEN		ENDP
+; *******************************************************************************************************
+; ****************************************
+; Reset internal variables
+; Entry: 
+;   
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   INC_ROW memory variable
+;   INC_COL memory variable
+;   DIV_SPEED memory variable
+;   NUM_TILES memory variable
+;   START_GAME memory variable
+;   END_GAME memory variable
+; Calls:
+;   -
+; ****************************************
+                  PUBLIC  INIT_GAME
+INIT_GAME         PROC    NEAR
+
+    MOV [INC_ROW], 0
+    MOV [INC_COL], 0
+
+    MOV [DIV_SPEED], 10
+
+    MOV [NUM_TILES], 0
+    
+    MOV [START_GAME], FALSE
+    MOV [END_GAME], FALSE
+
+    RET
+INIT_GAME	ENDP	
+; *******************************************************************************************************
+; ****************************************
+; Reads char from keyboard
+; If char is not available, blocks until a key is pressed
+; The char is not output to screen
+; Entry: 
+;
+; Returns:
+;   AL: ASCII CODE
+;   AH: ATTRIBUTE
+; Modifies:
+;   
+; Uses: 
+;   
+; Calls:
+;   
+; ****************************************
+PUBLIC  READ_CHAR
+READ_CHAR PROC NEAR
+
+    MOV AH, 8
+    INT 21h
+
+    RET
+      
+READ_CHAR ENDP
+; *******************************************************************************************************
+; ANEM A DIBUIXAR EL CAMP
+; ****************************************
+; Draws the rectangular field of the game
+; Entry: 
+; 
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;   Coordinates of the rectangle: 
+;    left - top: (FIELD_R1, FIELD_C1) 
+;    right - bottom: (FIELD_R2, FIELD_C2)
+;   Character: ASCII_FIELD
+;   Attribute: ATTR_FIELD
+; Calls:
+;   PRINT_CHAR_ATTR
+; ****************************************
+PUBLIC DRAW_FIELD
+DRAW_FIELD PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    PUSH DX
+
+    MOV AL, ASCII_FIELD
+    MOV BL, ATTR_FIELD
+
+    MOV DL, FIELD_C2
+  UP_DOWN_SCREEN_LIMIT:
+    MOV DH, FIELD_R1
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    MOV DH, FIELD_R2
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    DEC DL
+    CMP DL, FIELD_C1
+    JNS UP_DOWN_SCREEN_LIMIT
+
+    MOV DH, FIELD_R2
+  LEFT_RIGHT_SCREEN_LIMIT:
+    MOV DL, FIELD_C1
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    MOV DL, FIELD_C2
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    DEC DH
+    CMP DH, FIELD_R1
+    JNS LEFT_RIGHT_SCREEN_LIMIT
+                 
+    POP DX
+    POP BX
+    POP AX
+    RET
+
+DRAW_FIELD       ENDP
+; *******************************************************************************************************
+; FUNCIÓ PER PRINTAR UN CHAR ATTR
+; ****************************************
+; Prints character and attribute in the 
+; current cursor position, page 0 
+; Keeps the cursor position
+; Entry: 
+;   AL: ASCII to print
+;   BL: ATTRIBUTE to print
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;
+; Calls:
+;   int 10h, service AH=9
+; Nota:
+;   Compatibility problem when debugging
+; ****************************************
+PUBLIC PRINT_CHAR_ATTR
+PRINT_CHAR_ATTR PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    PUSH CX
+
+    MOV AH, 9
+    MOV BH, 0
+    MOV CX, 1
+    INT 10h
+
+    POP CX
+    POP BX
+    POP AX
+    RET
+
+PRINT_CHAR_ATTR        ENDP    
+; *******************************************************************************************************
+; ****************************************
+; Get cursor properties: coordinates and size (page 0)
+; Entry: 
+;   -
+; Returns:
+;   (DH, DL): coordinates -> (row, col)
+;   (CH, CL): cursor size
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=3
+; ****************************************
+PUBLIC GET_CURSOR_PROP
+GET_CURSOR_PROP PROC NEAR
+
+      PUSH AX
+      PUSH BX
+
+      MOV AH, 3
+      XOR BX, BX
+      INT 10h
+
+      POP BX
+      POP AX
+      RET
+      
+GET_CURSOR_PROP       ENDP
+; *******************************************************************************************************
+; ****************************************
+; Set cursor properties: coordinates and size (page 0)
+; Entry: 
+;   (DH, DL): coordinates -> (row, col)
+;   (CH, CL): cursor size
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=2
+; ****************************************
+PUBLIC SET_CURSOR_PROP
+SET_CURSOR_PROP PROC NEAR
+
+      PUSH AX
+      PUSH BX
+
+      MOV AH, 2
+      XOR BX, BX
+      INT 10h
+
+      POP BX
+      POP AX
+      RET
+      
+SET_CURSOR_PROP       ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Move cursor to coordinate
+; Cursor size if kept
+; Entry: 
+;   (DH, DL): coordinates -> (row, col)
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   GET_CURSOR_PROP
+;   SET_CURSOR_PROP
+; ****************************************
+PUBLIC MOVE_CURSOR
+MOVE_CURSOR PROC NEAR
+
+      PUSH DX
+      CALL GET_CURSOR_PROP  ; Get cursor size
+      POP DX
+      CALL SET_CURSOR_PROP
+      RET
+
+MOVE_CURSOR       ENDP 
+; *******************************************************************************************************
+; ****************************************
+; Hides the cursor 
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=1
+; ****************************************
+PUBLIC  HIDE_CURSOR
+HIDE_CURSOR PROC NEAR
+
+      PUSH AX
+      PUSH CX
+      
+      MOV AH, 1
+      MOV CX, CURSOR_SIZE_HIDE
+      INT 10h
+
+      POP CX
+      POP AX
+      RET
+
+HIDE_CURSOR       ENDP
+; *******************************************************************************************************
+; * ROGER ALAMANAC, DANIEL CASAS, 2024 (ENTI-UB)
+
+; **********************************
+; DECLARACIO DE VARIABLES I TECLES
+; **********************************
+
+SGROUP 		GROUP 	CODE_SEG, DATA_SEG
+			ASSUME 	CS:SGROUP, DS:SGROUP, SS:SGROUP
+
+    TRUE  EQU 1
+    FALSE EQU 0
+
+; CONTROL DE LES BARRES
+; JUGADOR 1
+    ASCII_LEFT          EQU 04Bh 
+    ASCII_RIGHT         EQU 04Dh
+    ASCII_QUIT          EQU 070h ; 'p'
+; JUGADOR 2
+    ASCII_a              EQU 061h    ; VA CAP A L'ESQUERRA AMB LA 'a'
+    ASCII_d              EQU 064h    ; VA CAP A LA DRETA AMB LA 'd'
+
+
+; ASCII / ATRR CODES PER PINTAR LA BARRA DE JUGADOR 1
+    ASCII_BARRA1        EQU 020h ; 020h es l'espai en blanc en hexadecimal del codi ascii per fer la barra 
+    ATTR_BARRA1         EQU 070h ; Asignem el color de la barra 
+    ASCII_BARRA2        EQU 020h
+    ATTR_BARRA2         EQU 007h
+
+; ASCII / ATTR CODES PER PINTAR LA PILOTA
+    ASCII_BALL      EQU 02Ah ;EL SIMBOL DE LA PILOTA SERA UN '*'
+    ATTR_BALL       EQU 0E0h 
+
+; ASCII / ATTR CODES PER PINTAR ELS BLOCS DESTRUIBLES
+    ASCII_BRICK     EQU 05Fh
+    ATTR_BRICK      EQU 0E0h
+
+; ASCII / ATTR PER PINTAR ELS LÍMITS DEL CAMP
+    ASCII_FIELD         EQU 020h
+    ATTR_FIELD          EQU 070h
+
+
+; ASCII
+
+ ASCII_YES_UPPERCASE      EQU 059h
+    ASCII_YES_LOWERCASE      EQU 079h
+
+; COLOREJAR DIMENSIONS DE LA PANTALLA EN NOMBRE DE CARACTERS
+    SCREEN_MAX_ROWS EQU 25
+    SCREEN_MAX_COLS EQU 80
+
+; DIMENSIONS DEL CAMP
+    FIELD_R1 EQU 1
+    FIELD_R2 EQU SCREEN_MAX_ROWS-2
+    FIELD_C1 EQU 1
+    FIELD_C2 EQU SCREEN_MAX_COLS-2
+
+;*************************
+;  CODI EXECUTABLE (MAIN)
+;*************************
+
+CODE_SEG	SEGMENT PUBLIC
+   ORG 100h; Indica on comença l'execució
+
+MAIN 	PROC 	NEAR
+
+    MAIN_GO:
+
+      CALL INIT_GAME
+      CALL INIT_SCREEN
+      CALL HIDE_CURSOR
+      CALL DRAW_FIELD
+
+      MOV DH, SCREEN_MAX_ROWS/2
+      MOV DL, SCREEN_MAX_COLS/2
+
+    MAIN_LOOP
+
+      CMP [END GAME], TRUE
+      JZ END_PROG
+
+      ; Comprovar si una tecla es pot llegir
+      MOV AH, 0Bh
+      INT 21h
+      CMP AL, 0
+      JZ MAIN_LOOP
+
+      CALL READ_CHAR ; si hi ha tecla disponible, llegeix
+
+      ; Comprovar si el joc s'acaba
+      CMP AL, ASCII_QUIT
+      JZ END_PROG
+
+      ; Comprovar si es una tecla especial
+      CMP AL, ASCII_SPECIAL_KEY
+      JNZ MAIN_LOOP
+
+      CALL READ_CHAR
+
+      ;Començar el joc
+      MOV [START_GAME], TRUE
+
+       CMP AL, OR ASCII_RIGHT ; Es compara si es prem X tecles
+      JZ RIGHT_KEY1
+      CMP AL, ASCII_LEFT
+      JZ LEFT_KEY2
+      CMP AL, ASCII_a
+      JZ LEFT_KEY2
+      CMP AL, ASCII_d
+      JZ RIGHT_KEY2
+
+      JMP MAIN_LOOP
+
+  RIGHT_KEY1: ;Funció per moure la barra del jugador 1 a la dreta
+      MOV [INC_COL], 1
+      MOV [INC_ROW], 0
+      JMP END_KEY
+
+MAIN ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Set screen to mode 3 (80x25, color) and 
+; clears the screen
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   Screen size: SCREEN_MAX_ROWS, SCREEN_MAX_COLS
+; Calls:
+;   int 10h, service AH=0
+;   int 10h, service AH=6
+; ****************************************
+PUBLIC INIT_SCREEN
+INIT_SCREEN	PROC NEAR
+
+      PUSH AX
+      PUSH BX
+      PUSH CX
+      PUSH DX
+
+      ; Set screen mode
+      MOV AL,3
+      MOV AH,0
+      INT 10h
+
+      ; Clear screen
+      XOR AL, AL
+      XOR CX, CX
+      MOV DH, SCREEN_MAX_ROWS
+      MOV DL, SCREEN_MAX_COLS
+      MOV BH, 7
+      MOV AH, 6
+      INT 10h
+      
+      POP DX      
+      POP CX      
+      POP BX      
+      POP AX      
+	RET
+
+INIT_SCREEN		ENDP
+; *******************************************************************************************************
+; ****************************************
+; Reset internal variables
+; Entry: 
+;   
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   INC_ROW memory variable
+;   INC_COL memory variable
+;   DIV_SPEED memory variable
+;   NUM_TILES memory variable
+;   START_GAME memory variable
+;   END_GAME memory variable
+; Calls:
+;   -
+; ****************************************
+                  PUBLIC  INIT_GAME
+INIT_GAME         PROC    NEAR
+
+    MOV [INC_ROW], 0
+    MOV [INC_COL], 0
+
+    MOV [DIV_SPEED], 10
+
+    MOV [NUM_TILES], 0
+    
+    MOV [START_GAME], FALSE
+    MOV [END_GAME], FALSE
+
+    RET
+INIT_GAME	ENDP	
+; *******************************************************************************************************
+; ****************************************
+; Reads char from keyboard
+; If char is not available, blocks until a key is pressed
+; The char is not output to screen
+; Entry: 
+;
+; Returns:
+;   AL: ASCII CODE
+;   AH: ATTRIBUTE
+; Modifies:
+;   
+; Uses: 
+;   
+; Calls:
+;   
+; ****************************************
+PUBLIC  READ_CHAR
+READ_CHAR PROC NEAR
+
+    MOV AH, 8
+    INT 21h
+
+    RET
+      
+READ_CHAR ENDP
+; *******************************************************************************************************
+; ANEM A DIBUIXAR EL CAMP
+; ****************************************
+; Draws the rectangular field of the game
+; Entry: 
+; 
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;   Coordinates of the rectangle: 
+;    left - top: (FIELD_R1, FIELD_C1) 
+;    right - bottom: (FIELD_R2, FIELD_C2)
+;   Character: ASCII_FIELD
+;   Attribute: ATTR_FIELD
+; Calls:
+;   PRINT_CHAR_ATTR
+; ****************************************
+PUBLIC DRAW_FIELD
+DRAW_FIELD PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    PUSH DX
+
+    MOV AL, ASCII_FIELD
+    MOV BL, ATTR_FIELD
+
+    MOV DL, FIELD_C2
+  UP_DOWN_SCREEN_LIMIT:
+    MOV DH, FIELD_R1
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    MOV DH, FIELD_R2
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    DEC DL
+    CMP DL, FIELD_C1
+    JNS UP_DOWN_SCREEN_LIMIT
+
+    MOV DH, FIELD_R2
+  LEFT_RIGHT_SCREEN_LIMIT:
+    MOV DL, FIELD_C1
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    MOV DL, FIELD_C2
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    DEC DH
+    CMP DH, FIELD_R1
+    JNS LEFT_RIGHT_SCREEN_LIMIT
+                 
+    POP DX
+    POP BX
+    POP AX
+    RET
+
+DRAW_FIELD       ENDP
+; *******************************************************************************************************
+; FUNCIÓ PER PRINTAR UN CHAR ATTR
+; ****************************************
+; Prints character and attribute in the 
+; current cursor position, page 0 
+; Keeps the cursor position
+; Entry: 
+;   AL: ASCII to print
+;   BL: ATTRIBUTE to print
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;
+; Calls:
+;   int 10h, service AH=9
+; Nota:
+;   Compatibility problem when debugging
+; ****************************************
+PUBLIC PRINT_CHAR_ATTR
+PRINT_CHAR_ATTR PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    PUSH CX
+
+    MOV AH, 9
+    MOV BH, 0
+    MOV CX, 1
+    INT 10h
+
+    POP CX
+    POP BX
+    POP AX
+    RET
+
+PRINT_CHAR_ATTR        ENDP    
+; *******************************************************************************************************
+; ****************************************
+; Get cursor properties: coordinates and size (page 0)
+; Entry: 
+;   -
+; Returns:
+;   (DH, DL): coordinates -> (row, col)
+;   (CH, CL): cursor size
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=3
+; ****************************************
+PUBLIC GET_CURSOR_PROP
+GET_CURSOR_PROP PROC NEAR
+
+      PUSH AX
+      PUSH BX
+
+      MOV AH, 3
+      XOR BX, BX
+      INT 10h
+
+      POP BX
+      POP AX
+      RET
+      
+GET_CURSOR_PROP       ENDP
+; *******************************************************************************************************
+; ****************************************
+; Set cursor properties: coordinates and size (page 0)
+; Entry: 
+;   (DH, DL): coordinates -> (row, col)
+;   (CH, CL): cursor size
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=2
+; ****************************************
+PUBLIC SET_CURSOR_PROP
+SET_CURSOR_PROP PROC NEAR
+
+      PUSH AX
+      PUSH BX
+
+      MOV AH, 2
+      XOR BX, BX
+      INT 10h
+
+      POP BX
+      POP AX
+      RET
+      
+SET_CURSOR_PROP       ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Move cursor to coordinate
+; Cursor size if kept
+; Entry: 
+;   (DH, DL): coordinates -> (row, col)
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   GET_CURSOR_PROP
+;   SET_CURSOR_PROP
+; ****************************************
+PUBLIC MOVE_CURSOR
+MOVE_CURSOR PROC NEAR
+
+      PUSH DX
+      CALL GET_CURSOR_PROP  ; Get cursor size
+      POP DX
+      CALL SET_CURSOR_PROP
+      RET
+
+MOVE_CURSOR       ENDP 
+; *******************************************************************************************************
+; ****************************************
+; Hides the cursor 
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=1
+; ****************************************
+PUBLIC  HIDE_CURSOR
+HIDE_CURSOR PROC NEAR
+
+      PUSH AX
+      PUSH CX
+      
+      MOV AH, 1
+      MOV CX, CURSOR_SIZE_HIDE
+      INT 10h
+
+      POP CX
+      POP AX
+      RET
+
+HIDE_CURSOR       ENDP
+; *******************************************************************************************************
+; * ROGER ALAMANAC, DANIEL CASAS, 2024 (ENTI-UB)
+
+; **********************************
+; DECLARACIO DE VARIABLES I TECLES
+; **********************************
+
+SGROUP 		GROUP 	CODE_SEG, DATA_SEG
+			ASSUME 	CS:SGROUP, DS:SGROUP, SS:SGROUP
+
+    TRUE  EQU 1
+    FALSE EQU 0
+
+; CONTROL DE LES BARRES
+; JUGADOR 1
+    ASCII_LEFT          EQU 04Bh 
+    ASCII_RIGHT         EQU 04Dh
+    ASCII_QUIT          EQU 070h ; 'p'
+; JUGADOR 2
+    ASCII_a              EQU 061h    ; VA CAP A L'ESQUERRA AMB LA 'a'
+    ASCII_d              EQU 064h    ; VA CAP A LA DRETA AMB LA 'd'
+
+
+; ASCII / ATRR CODES PER PINTAR LA BARRA DE JUGADOR 1
+    ASCII_BARRA1        EQU 020h ; 020h es l'espai en blanc en hexadecimal del codi ascii per fer la barra 
+    ATTR_BARRA1         EQU 070h ; Asignem el color de la barra 
+    ASCII_BARRA2        EQU 020h
+    ATTR_BARRA2         EQU 007h
+
+; ASCII / ATTR CODES PER PINTAR LA PILOTA
+    ASCII_BALL      EQU 02Ah ;EL SIMBOL DE LA PILOTA SERA UN '*'
+    ATTR_BALL       EQU 0E0h 
+
+; ASCII / ATTR CODES PER PINTAR ELS BLOCS DESTRUIBLES
+    ASCII_BRICK     EQU 05Fh
+    ATTR_BRICK      EQU 0E0h
+
+; ASCII / ATTR PER PINTAR ELS LÍMITS DEL CAMP
+    ASCII_FIELD         EQU 020h
+    ATTR_FIELD          EQU 070h
+
+
+; ASCII
+
+ ASCII_YES_UPPERCASE      EQU 059h
+    ASCII_YES_LOWERCASE      EQU 079h
+
+; COLOREJAR DIMENSIONS DE LA PANTALLA EN NOMBRE DE CARACTERS
+    SCREEN_MAX_ROWS EQU 25
+    SCREEN_MAX_COLS EQU 80
+
+; DIMENSIONS DEL CAMP
+    FIELD_R1 EQU 1
+    FIELD_R2 EQU SCREEN_MAX_ROWS-2
+    FIELD_C1 EQU 1
+    FIELD_C2 EQU SCREEN_MAX_COLS-2
+
+;*************************
+;  CODI EXECUTABLE (MAIN)
+;*************************
+
+CODE_SEG	SEGMENT PUBLIC
+   ORG 100h; Indica on comença l'execució
+
+MAIN 	PROC 	NEAR
+
+    MAIN_GO:
+
+      CALL INIT_GAME
+      CALL INIT_SCREEN
+      CALL HIDE_CURSOR
+      CALL DRAW_FIELD
+
+      MOV DH, SCREEN_MAX_ROWS/2
+      MOV DL, SCREEN_MAX_COLS/2
+
+    MAIN_LOOP
+
+      CMP [END GAME], TRUE
+      JZ END_PROG
+
+      ; Comprovar si una tecla es pot llegir
+      MOV AH, 0Bh
+      INT 21h
+      CMP AL, 0
+      JZ MAIN_LOOP
+
+      CALL READ_CHAR ; si hi ha tecla disponible, llegeix
+
+      ; Comprovar si el joc s'acaba
+      CMP AL, ASCII_QUIT
+      JZ END_PROG
+
+      ; Comprovar si es una tecla especial
+      CMP AL, ASCII_SPECIAL_KEY
+      JNZ MAIN_LOOP
+
+      CALL READ_CHAR
+
+      ;Començar el joc
+      MOV [START_GAME], TRUE
+
+       CMP AL, OR ASCII_RIGHT ; Es compara si es prem X tecles
+      JZ RIGHT_KEY1
+      CMP AL, ASCII_LEFT
+      JZ LEFT_KEY2
+      CMP AL, ASCII_a
+      JZ LEFT_KEY2
+      CMP AL, ASCII_d
+      JZ RIGHT_KEY2
+
+      JMP MAIN_LOOP
+
+  RIGHT_KEY1: ;Funció per moure la barra del jugador 1 a la dreta
+      MOV [INC_COL], 1
+      MOV [INC_ROW], 0
+      JMP END_KEY
+
+MAIN ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Set screen to mode 3 (80x25, color) and 
+; clears the screen
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   Screen size: SCREEN_MAX_ROWS, SCREEN_MAX_COLS
+; Calls:
+;   int 10h, service AH=0
+;   int 10h, service AH=6
+; ****************************************
+PUBLIC INIT_SCREEN
+INIT_SCREEN	PROC NEAR
+
+      PUSH AX
+      PUSH BX
+      PUSH CX
+      PUSH DX
+
+      ; Set screen mode
+      MOV AL,3
+      MOV AH,0
+      INT 10h
+
+      ; Clear screen
+      XOR AL, AL
+      XOR CX, CX
+      MOV DH, SCREEN_MAX_ROWS
+      MOV DL, SCREEN_MAX_COLS
+      MOV BH, 7
+      MOV AH, 6
+      INT 10h
+      
+      POP DX      
+      POP CX      
+      POP BX      
+      POP AX      
+	RET
+
+INIT_SCREEN		ENDP
+; *******************************************************************************************************
+; ****************************************
+; Reset internal variables
+; Entry: 
+;   
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   INC_ROW memory variable
+;   INC_COL memory variable
+;   DIV_SPEED memory variable
+;   NUM_TILES memory variable
+;   START_GAME memory variable
+;   END_GAME memory variable
+; Calls:
+;   -
+; ****************************************
+                  PUBLIC  INIT_GAME
+INIT_GAME         PROC    NEAR
+
+    MOV [INC_ROW], 0
+    MOV [INC_COL], 0
+
+    MOV [DIV_SPEED], 10
+
+    MOV [NUM_TILES], 0
+    
+    MOV [START_GAME], FALSE
+    MOV [END_GAME], FALSE
+
+    RET
+INIT_GAME	ENDP	
+; *******************************************************************************************************
+; ****************************************
+; Reads char from keyboard
+; If char is not available, blocks until a key is pressed
+; The char is not output to screen
+; Entry: 
+;
+; Returns:
+;   AL: ASCII CODE
+;   AH: ATTRIBUTE
+; Modifies:
+;   
+; Uses: 
+;   
+; Calls:
+;   
+; ****************************************
+PUBLIC  READ_CHAR
+READ_CHAR PROC NEAR
+
+    MOV AH, 8
+    INT 21h
+
+    RET
+      
+READ_CHAR ENDP
+; *******************************************************************************************************
+; ANEM A DIBUIXAR EL CAMP
+; ****************************************
+; Draws the rectangular field of the game
+; Entry: 
+; 
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;   Coordinates of the rectangle: 
+;    left - top: (FIELD_R1, FIELD_C1) 
+;    right - bottom: (FIELD_R2, FIELD_C2)
+;   Character: ASCII_FIELD
+;   Attribute: ATTR_FIELD
+; Calls:
+;   PRINT_CHAR_ATTR
+; ****************************************
+PUBLIC DRAW_FIELD
+DRAW_FIELD PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    PUSH DX
+
+    MOV AL, ASCII_FIELD
+    MOV BL, ATTR_FIELD
+
+    MOV DL, FIELD_C2
+  UP_DOWN_SCREEN_LIMIT:
+    MOV DH, FIELD_R1
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    MOV DH, FIELD_R2
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    DEC DL
+    CMP DL, FIELD_C1
+    JNS UP_DOWN_SCREEN_LIMIT
+
+    MOV DH, FIELD_R2
+  LEFT_RIGHT_SCREEN_LIMIT:
+    MOV DL, FIELD_C1
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    MOV DL, FIELD_C2
+    CALL MOVE_CURSOR
+    CALL PRINT_CHAR_ATTR
+
+    DEC DH
+    CMP DH, FIELD_R1
+    JNS LEFT_RIGHT_SCREEN_LIMIT
+                 
+    POP DX
+    POP BX
+    POP AX
+    RET
+
+DRAW_FIELD       ENDP
+; *******************************************************************************************************
+; FUNCIÓ PER PRINTAR UN CHAR ATTR
+; ****************************************
+; Prints character and attribute in the 
+; current cursor position, page 0 
+; Keeps the cursor position
+; Entry: 
+;   AL: ASCII to print
+;   BL: ATTRIBUTE to print
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;
+; Calls:
+;   int 10h, service AH=9
+; Nota:
+;   Compatibility problem when debugging
+; ****************************************
+PUBLIC PRINT_CHAR_ATTR
+PRINT_CHAR_ATTR PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    PUSH CX
+
+    MOV AH, 9
+    MOV BH, 0
+    MOV CX, 1
+    INT 10h
+
+    POP CX
+    POP BX
+    POP AX
+    RET
+
+PRINT_CHAR_ATTR        ENDP    
+; *******************************************************************************************************
+; ****************************************
+; Get cursor properties: coordinates and size (page 0)
+; Entry: 
+;   -
+; Returns:
+;   (DH, DL): coordinates -> (row, col)
+;   (CH, CL): cursor size
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=3
+; ****************************************
+PUBLIC GET_CURSOR_PROP
+GET_CURSOR_PROP PROC NEAR
+
+      PUSH AX
+      PUSH BX
+
+      MOV AH, 3
+      XOR BX, BX
+      INT 10h
+
+      POP BX
+      POP AX
+      RET
+      
+GET_CURSOR_PROP       ENDP
+; *******************************************************************************************************
+; ****************************************
+; Set cursor properties: coordinates and size (page 0)
+; Entry: 
+;   (DH, DL): coordinates -> (row, col)
+;   (CH, CL): cursor size
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=2
+; ****************************************
+PUBLIC SET_CURSOR_PROP
+SET_CURSOR_PROP PROC NEAR
+
+      PUSH AX
+      PUSH BX
+
+      MOV AH, 2
+      XOR BX, BX
+      INT 10h
+
+      POP BX
+      POP AX
+      RET
+      
+SET_CURSOR_PROP       ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Move cursor to coordinate
+; Cursor size if kept
+; Entry: 
+;   (DH, DL): coordinates -> (row, col)
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   GET_CURSOR_PROP
+;   SET_CURSOR_PROP
+; ****************************************
+PUBLIC MOVE_CURSOR
+MOVE_CURSOR PROC NEAR
+
+      PUSH DX
+      CALL GET_CURSOR_PROP  ; Get cursor size
+      POP DX
+      CALL SET_CURSOR_PROP
+      RET
+
+MOVE_CURSOR       ENDP 
+; *******************************************************************************************************
+; ****************************************
+; Hides the cursor 
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   -
+; Calls:
+;   int 10h, service AH=1
+; ****************************************
+PUBLIC  HIDE_CURSOR
+HIDE_CURSOR PROC NEAR
+
+      PUSH AX
+      PUSH CX
+      
+      MOV AH, 1
+      MOV CX, CURSOR_SIZE_HIDE
+      INT 10h
+
+      POP CX
+      POP AX
+      RET
+
+HIDE_CURSOR       ENDP
+; *******************************************************************************************************
+; PRINTAR LES BARRES DELS JUGADORS
+; ****************************************
+; Printar la posició actual de la barra 1
+; Entry: 
+; 
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;   character: ASCII_BARRA1
+;   attribute: ATTR_BARRA1
+; Calls:
+;   PRINT_CHAR_ATTR
+; ****************************************
+PUBLIC PRINT_BAR1
+PRINT_BAR1 PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    MOV AL, ASCII_BARRA1
+    MOV BL, ATTR_BARRA1
+    CALL PRINT_CHAR_ATTR
+      
+    POP BX
+    POP AX
+    RET
+
+PRINT_BAR1       ENDP     
+
+; ****************************************
+; Printar la posició actual de la barra 2
+; Entry: 
+; 
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;   character: ASCII_BARRA2
+;   attribute: ATTR_BARRA2
+; Calls:
+;   PRINT_CHAR_ATTR
+; ****************************************
+PUBLIC PRINT_BAR1
+PRINT_BAR1 PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    MOV AL, ASCII_BARRA2
+    MOV BL, ATTR_BARRA2
+    CALL PRINT_CHAR_ATTR
+      
+    POP BX
+    POP AX
+    RET
+
+PRINT_BAR2       ENDP     
+
+; *******************************************************************************************************
+; PRINTAR ELS BLOCS DESTRUIBLES
+; ****************************************
+; Printar la posició del bloc
+; Entry: 
+; 
+; Returns:
+;   
+; Modifies:
+;   
+; Uses: 
+;   character: ASCII_BRICK
+;   attribute: ATTR_BRICK
+; Calls:
+;   PRINT_CHAR_ATTR
+; ****************************************
+PUBLIC PRINT_BRICK
+PRINT_BAR1 PROC NEAR
+
+    PUSH AX
+    PUSH BX
+    MOV AL, ASCII_BRICK
+    MOV BL, ATTR_BRICK
+    CALL PRINT_CHAR_ATTR
+      
+    POP BX
+    POP AX
+    RET
+
+PRINT_BRICK      ENDP     
+
+
+
+
+
+
+  
+        
+
       
  
 
 
-   
+
+
+  
+        
+
+      
+ 
+
+
+
+
+
+  
+        
+
+      
+ 
