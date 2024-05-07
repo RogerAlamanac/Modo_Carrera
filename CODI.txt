@@ -12,15 +12,21 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 
 ; CONTROL DE LES BARRES
 ; JUGADOR 1
-    ASCII_LEFT          EQU 04Bh
-    ASCII_RIGHT         EQU 04DH
+    ASCII_LEFT          EQU 04Bh 
+    ASCII_RIGHT         EQU 04Dh
 ; JUGADOR 2
-    CHAR_A              EQU     ; VA CAP A L'ESQUERRA
-    CHAR_B              EQU     ; VA CAP A LA DRETA
+    ASCII_a              EQU 061h    ; VA CAP A L'ESQUERRA AMB LA 'a'
+    ASCII_d              EQU 064h    ; VA CAP A LA DRETA AMB LA 'd'
 
 
 ; ASCII / ATRR CODES PER PINTAR LA BARRA DE JUGADOR 1
-    ASCII_BARRA1        EQU 02Ah 
+    ASCII_BARRA1        EQU 020h ; 020h es l'espai en blanc en hexadecimal del codi ascii per fer la barra 
+
+
+; ASCII / ATTR PER PINTAR ELS LÍMITS DEL CAMP
+    ASCII_FIELD         EQU 020h
+    ATTR_FIELD          EQU 070h
+
 
 ; ASCII
 
@@ -42,7 +48,7 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 ;*************************
 
 CODE_SEG	SEGMENT PUBLIC
-			ORG 100h
+   ORG 100h; Indica on comença l'execució
 
 MAIN 	PROC 	NEAR
 
@@ -56,7 +62,33 @@ MAIN 	PROC 	NEAR
       MOV DH, SCREEN_MAX_ROWS/2
       MOV DL, SCREEN_MAX_COLS/2
 
-    MAIN LOOP:
+    MAIN_LOOP
 
-      C
+      CMP [END GAME], TRUE
+      JZ END_PROG
 
+      ; Comprovar si una tecla es pot llegir
+      MOV AH, 0Bh
+      INT 21h
+      CMP AL, 0
+      JZ MAIN_LOOP
+
+      CALL READ_CHAR ; si hi ha tecla disponible, llegeix
+
+      ; Comprovar si el joc s'acaba
+      CMP AL, ASCII_QUIT
+      JZ END_PROG
+
+      ; Comprovar si es una tecla especial
+      CMP AL, ASCII_SPECIAL_KEY
+      JNZ MAIN_LOOP
+
+      CALL READ_CHAR
+
+      ;Començar el joc
+      MOV [START_GAME], TRUE
+      
+ 
+
+
+   
