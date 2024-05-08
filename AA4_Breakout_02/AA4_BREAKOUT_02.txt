@@ -1,0 +1,5 @@
+- Aquest seria l'escenari inicial del joc.
+- Hi ha alguns blocs destruibles que van canviant de color perquè es col·loquen varis en la mateixa posició de diferents colors i no sabem com arreglar-ho ni perquè.
+
+FET PER: ROGER ALAMAÑAC I DANIEL CASAS
+
