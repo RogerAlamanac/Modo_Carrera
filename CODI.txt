@@ -1163,9 +1163,14 @@ OLD_INTERRUPT_BASE    DW  0, 0  ; Stores the current (system) timer ISR address
     ; Declaració variables per la pilota 1
     POS_BALL1_ROW DB 0 ; Posició inicial a la fila de la pilota 1
     POS_BALL1_COL DB 0 ; Posició inicial a la columna de la pilota 1
-    ; Declaració variables per la pilota 1
+    DIRECTION1 DB 0; Direcció 1 en la qual surt la pilota
+    DIRECTION2 DB 3; Direcció 2 en la qual surt la pilota
+    
+    ; Declaració variables per la pilota 2
     POS_BALL2_ROW DB 0 ; Posició inicial a la fila de la pilota 2
     POS_BALL2_COL DB 0 ; Posició inicial a la columna de la pilota 2
+    DIRECTION3 DB 0; Direcció 1 en la qual surt la pilota 2
+    DIRECTION4 DB -3; Direcció 2 en la qual surt la pilota 2
 DATA_SEG	ENDS
 
 END MAIN
