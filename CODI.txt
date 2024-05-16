@@ -87,6 +87,7 @@ MAIN 	PROC 	NEAR
        CALL HIDE_CURSOR
        CALL DRAW_FIELD
        CALL UPDATE_SCREEN
+       
 
       MOV DH, SCREEN_MAX_ROWS/2
       MOV DL, SCREEN_MAX_COLS/2
@@ -97,6 +98,7 @@ MAIN 	PROC 	NEAR
        JZ END_PROG
       CALL PRINT_BRICK
       CALL DRAW_BALLS
+      CALL MOVE_BALLS
 
       ; Comprovar si una tecla es pot llegir
       MOV AH, 0Bh
@@ -271,8 +273,6 @@ INIT_SCREEN		ENDP
 ; Modifies:
 ;   -
 ; Uses: 
-;   INC_ROW memory variable
-;   INC_COL memory variable
 ;   DIV_SPEED memory variable
 ;   NUM_TILES memory variable
 ;   START_GAME memory variable
@@ -282,9 +282,6 @@ INIT_SCREEN		ENDP
 ; ****************************************
                   PUBLIC  INIT_GAME
 INIT_GAME         PROC    NEAR
-
-    MOV [INC_ROW], 0
-    MOV [INC_COL], 0
 
     MOV [DIV_SPEED], 10
 
@@ -1109,27 +1106,28 @@ DRAW_BALLS ENDP
 ; Fer que es moguin les pilotes
 PUBLIC MOVE_BALLS
 MOVE_BALLS PROC NEAR
-    ; Mover la primera pelota en la dirección especificada
+    ; Mover la primera pelota en la dirección especificada (horizontal)
     MOV DL, POS_BALL1_COL  ; Cargar la columna actual de la primera pelota en DL
     ADD DL, DIRECTION1     ; Sumar la dirección actual a la columna actual
     MOV POS_BALL1_COL, DL  ; Guardar la nueva columna de la primera pelota
 
+    ; No mover la fila de la primera pelota (solo horizontal)
     MOV DH, POS_BALL1_ROW  ; Cargar la fila actual de la primera pelota en DH
     ADD DH, DIRECTION2     ; Sumar la dirección actual a la fila actual
     MOV POS_BALL1_ROW, DH  ; Guardar la nueva fila de la primera pelota
 
-    ; Mover la segunda pelota en la dirección especificada
+    ; Mover la segunda pelota en la dirección especificada (horizontal)
     MOV DL, POS_BALL2_COL  ; Cargar la columna actual de la segunda pelota en DL
     ADD DL, DIRECTION3     ; Sumar la dirección actual a la columna actual
     MOV POS_BALL2_COL, DL  ; Guardar la nueva columna de la segunda pelota
 
+    ; No mover la fila de la segunda pelota (solo horizontal)
     MOV DH, POS_BALL2_ROW  ; Cargar la fila actual de la segunda pelota en DH
     ADD DH, DIRECTION4     ; Sumar la dirección actual a la fila actual
     MOV POS_BALL2_ROW, DH  ; Guardar la nueva fila de la segunda pelota
 
     RET
 MOVE_BALLS ENDP
-
     
 CODE_SEG ENDS
 
@@ -1140,10 +1138,6 @@ DATA_SEG	SEGMENT	PUBLIC
     ; DEFINE YOUR MEMORY HERE
 	DATA		DB 20 DUP (0)
 OLD_INTERRUPT_BASE    DW  0, 0  ; Stores the current (system) timer ISR address
-
-    ; (INC_ROW. INC_COL) may be (-1, 0, 1), and determine the direction of movement of the snake
-    INC_ROW DB 0    
-    INC_COL DB 0
 
     NUM_TILES DW 0              ; SNAKE LENGTH
     NUM_TILES_INC_SPEED DB 20   ; THE SPEED IS INCREASED EVERY 'NUM_TILES_INC_SPEED'
@@ -1174,8 +1168,6 @@ OLD_INTERRUPT_BASE    DW  0, 0  ; Stores the current (system) timer ISR address
 DATA_SEG	ENDS
 
 END MAIN
-
-
 
 
   
