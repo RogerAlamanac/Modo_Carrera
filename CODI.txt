@@ -80,6 +80,7 @@ CODE_SEG	SEGMENT PUBLIC
 MAIN 	PROC 	NEAR
 
     MAIN_GO:
+       CALL REGISTER_TIMER_INTERRUPT
 
        CALL INIT_GAME
        CALL INIT_BALLS
@@ -1128,7 +1129,191 @@ MOVE_BALLS PROC NEAR
 
     RET
 MOVE_BALLS ENDP
-    
+
+; ****************************************
+; Read character and attribute at cursor position, page 0
+; Entry: 
+;
+; Returns:
+;   AL: ASCII CODE
+;   AH: ATTRIBUTE
+; Modifies:
+;   
+; Uses: 
+;   
+; Calls:
+;   int 10h, service AH=8
+; ****************************************
+PUBLIC READ_SCREEN_CHAR                 
+READ_SCREEN_CHAR PROC NEAR
+
+    PUSH BX
+
+    MOV AH, 8
+    XOR BH, BH
+    INT 10h
+
+    POP BX
+    RET
+      
+READ_SCREEN_CHAR  ENDP
+
+; ****************************************
+; Game timer interrupt service routine
+; Called 18.2 times per second by the operating system
+; Calls previous ISR
+; Manages the movement of the snake: 
+;   position, direction, speed, length, display, collisions
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   OLD_INTERRUPT_BASE memory variable
+;   START_GAME memory variable
+;   END_GAME memory variable
+;   INT_COUNT memory variable
+;   DIV_SPEED memory variable
+;   INC_COL memory variable
+;   INC_ROW memory variable
+;   ATTR_SNAKE constant
+;   NUM_TILES memory variable
+;   NUM_TILES_INC_SPEED
+; Calls:
+;   MOVE_CURSOR
+;   READ_SCREEN_CHAR
+;   PRINT_SNAKE
+; ****************************************
+PUBLIC NEW_TIMER_INTERRUPT
+NEW_TIMER_INTERRUPT PROC NEAR
+
+    ; Call previous interrupt
+    PUSHF
+    CALL DWORD PTR [OLD_INTERRUPT_BASE]
+
+    PUSH AX
+
+    ; Do nothing if game is stopped
+    CMP [START_GAME], TRUE
+    JNZ END_ISR
+
+    ; Increment INC_COUNT and check if worm position must be updated (INT_COUNT == DIV_COUNT)
+    INC [INT_COUNT]
+    MOV AL, [INT_COUNT]
+    CMP [DIV_SPEED], AL
+    JNZ END_ISR
+    MOV [INT_COUNT], 0
+
+    ; Load worm coordinates
+    ADD DL, [INC_COL]
+    ADD DH, [INC_ROW]
+
+    ; Move snake on the screen
+    CALL MOVE_CURSOR
+
+    ; Comprovar si la bola 1 colisiona amb el jugador o amb un bloc
+    CALL READ_SCREEN_CHAR
+    CMP AH, ATTR_BALL1
+    CALL DESTROY_BLOCK
+
+    ; Comprovar si la bola 2 colisiona amb el jugador o amb un bloc
+    CALL READ_SCREEN_CHAR
+    MOV AH, [ATTR_BRICK_BLUE]
+    CMP AH, ATTR_BALL2
+    CALL DESTROY_BLOCK 
+
+
+    ; Increment the length of the snake
+    INC [NUM_TILES]
+    CALL PRINT_SNAKE
+
+    ; Check if it is time to increase the speed of the snake
+    CMP [DIV_SPEED], 1
+    JZ END_ISR
+    MOV AX, [NUM_TILES]
+    DIV [NUM_TILES_INC_SPEED]
+    CMP AH, 0                 ; REMAINDER
+    JNZ END_ISR
+    DEC [DIV_SPEED]
+
+    JMP END_ISR
+      
+END_SNAKES:
+      MOV [END_GAME], TRUE
+      
+END_ISR:
+
+      POP AX
+      IRET
+
+NEW_TIMER_INTERRUPT ENDP
+
+; ****************************************
+; Replaces current timer ISR with the game timer ISR
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   OLD_INTERRUPT_BASE memory variable
+;   NEW_TIMER_INTERRUPT memory variable
+; Calls:
+;   int 21h, service AH=35 (system interrupt 08)
+; ****************************************
+PUBLIC REGISTER_TIMER_INTERRUPT
+REGISTER_TIMER_INTERRUPT PROC NEAR
+
+        PUSH AX
+        PUSH BX
+        PUSH DS
+        PUSH ES 
+
+        CLI                                 ;Disable Ints
+        
+        ;Get current 01CH ISR segment:offset
+        MOV  AX, 3508h                      ;Select MS-DOS service 35h, interrupt 08h
+        INT  21h                            ;Get the existing ISR entry for 08h
+        MOV  WORD PTR OLD_INTERRUPT_BASE+02h, ES  ;Store Segment 
+        MOV  WORD PTR OLD_INTERRUPT_BASE, BX  ;Store Offset
+
+        ;Set new 01Ch ISR segment:offset
+        MOV  AX, 2508h                      ;MS-DOS serivce 25h, IVT entry 01Ch
+        MOV  DX, offset NEW_TIMER_INTERRUPT ;Set the offset where the new IVT entry should point to
+        INT  21h                            ;Define the new vector
+
+        STI                                 ;Re-enable interrupts
+
+        POP  ES                             ;Restore interrupts
+        POP  DS
+        POP  BX
+        POP  AX
+        RET      
+
+REGISTER_TIMER_INTERRUPT ENDP
+
+; ****************************************
+; Destrueix un bloc
+; Entry: 
+;   -
+; Returns:
+;   -
+; Modifies:
+;   -
+; Uses: 
+;   OLD_INTERRUPT_BASE memory variable
+;   NEW_TIMER_INTERRUPT memory variable
+; Calls:
+;   int 21h, service AH=35 (system interrupt 08)
+; ****************************************
+PUBLIC DESTROY_BRICKS
+DESTROY_BRICKS PROC NEAR
+
+
+DESTROY_BRICKS ENDP
 CODE_SEG ENDS
 
 ; *************************************************************************
@@ -1138,6 +1323,9 @@ DATA_SEG	SEGMENT	PUBLIC
     ; DEFINE YOUR MEMORY HERE
 	DATA		DB 20 DUP (0)
 OLD_INTERRUPT_BASE    DW  0, 0  ; Stores the current (system) timer ISR address
+
+    INC_ROW DB 0    
+    INC_COL DB 0
 
     NUM_TILES DW 0              ; SNAKE LENGTH
     NUM_TILES_INC_SPEED DB 20   ; THE SPEED IS INCREASED EVERY 'NUM_TILES_INC_SPEED'
