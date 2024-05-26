@@ -4,8 +4,8 @@
 ; DECLARACIO DE VARIABLES I TECLES
 ; **********************************
 
-SGROUP 		GROUP 	CODE_SEG, DATA_SEG
-			ASSUME 	CS:SGROUP, DS:SGROUP, SS:SGROUP
+SGROUP GROUP CODE_SEG, DATA_SEG
+ASSUME CS:SGROUP, DS:SGROUP, SS:SGROUP
 
     TRUE  EQU 1
     FALSE EQU 0
@@ -22,12 +22,13 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 
 
 ; ASCII / ATRR CODES PER PINTAR LA BARRA DE JUGADOR 1
-    ASCII_BARRA1        EQU 020h ; 020h es l'espai en blanc en hexadecimal del codi ascii per fer la barra 
-    ATTR_BARRA1         EQU 070h ; Asignem el color de la barra 
+    ASCII_BARRA1        EQU 020h ; 020h es l'espai en blanc en hexadecimal del codi ascii per fer la barra
+    ATTR_BARRA1         EQU 070h ; Asignem el color de la barra
     ASCII_BARRA2        EQU 020h
     ATTR_BARRA2         EQU 070h
     MIN_BAR_POSITION EQU 1 ; Posición mínima de la barra
-    MAX_BAR_POSITION EQU SCREEN_MAX_ROWS - 2 ;
+    MAX_BAR_POSITION EQU SCREEN_MAX_ROWS - 6 ;
+    BAR_SIZE EQU 5
 
 ; ASCII / ATTR CODES PER PINTAR LA PILOTA
     ASCII_BALL      EQU 02Ah ;EL SIMBOL DE LA PILOTA SERA UN '*'
@@ -45,7 +46,7 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
     ATTR_BRICK_GREEN   EQU 020h
     ATTR_BRICK_YELLOW EQU 0ECh
 
-; ASCII / ATTR PER PINTAR ELS LÃMITS DEL CAMP
+; ASCII / ATTR PER PINTAR ELS LÃ MITS DEL CAMP
     ASCII_FIELD         EQU 020h
     ATTR_FIELD          EQU 070h
     ASCII_NUMBER_ZERO   EQU 030h
@@ -54,11 +55,10 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 ; CURSOR
     CURSOR_SIZE_HIDE EQU 02607h  ; BIT 5 OF CH = 1 MEANS HIDE CURSOR
     CURSOR_SIZE_SHOW EQU 00607h
-    
+   
 ; ASCII
 
- ASCII_YES_UPPERCASE      EQU 059h
- ASCII_YES_LOWERCASE      EQU 079h
+ ASCII_YES      EQU 020h
 
 ; COLOREJAR DIMENSIONS DE LA PANTALLA EN NOMBRE DE CARACTERS
     SCREEN_MAX_ROWS EQU 25              
@@ -67,20 +67,19 @@ SGROUP 		GROUP 	CODE_SEG, DATA_SEG
 ; DIMENSIONS DEL CAMP
     FIELD_R1 EQU 0
     FIELD_R2 EQU SCREEN_MAX_ROWS -1
-    FIELD_C1 EQU 1
+    FIELD_C1 EQU 0
     FIELD_C2 EQU SCREEN_MAX_COLS-1
 
 ;*************************
 ;  CODI EXECUTABLE (MAIN)
 ;*************************
 
-CODE_SEG	SEGMENT PUBLIC
+CODE_SEG SEGMENT PUBLIC
    ORG 100h; Indica on comença l'execució
 
-MAIN 	PROC 	NEAR
+MAIN PROC NEAR
 
     MAIN_GO:
-       CALL REGISTER_TIMER_INTERRUPT
 
        CALL INIT_GAME
        CALL INIT_BALLS
@@ -88,7 +87,6 @@ MAIN 	PROC 	NEAR
        CALL HIDE_CURSOR
        CALL DRAW_FIELD
        CALL UPDATE_SCREEN
-       
 
       MOV DH, SCREEN_MAX_ROWS/2
       MOV DL, SCREEN_MAX_COLS/2
@@ -98,8 +96,10 @@ MAIN 	PROC 	NEAR
        CMP [END_GAME], TRUE
        JZ END_PROG
       CALL PRINT_BRICK
-      CALL DRAW_BALLS
+      CALL CLEAR_BALLS
       CALL MOVE_BALLS
+      CALL DRAW_BALLS
+      CALL DELAY
 
       ; Comprovar si una tecla es pot llegir
       MOV AH, 0Bh
@@ -198,7 +198,7 @@ UPDATE_SCREEN:
     CALL PRINT_BAR1
     CALL PRINT_BAR2
     JMP MAIN_LOOP
-      
+     
       JMP MAIN_LOOP
 
 END_PROG:
@@ -207,36 +207,34 @@ END_PROG:
       CALL PRINT_SCORE_STRING
       CALL PRINT_SCORE
       CALL PRINT_PLAY_AGAIN_STRING
-      
+     
       CALL READ_CHAR
 
-      CMP AL, ASCII_YES_UPPERCASE
-      JZ MAIN_GO
-      CMP AL, ASCII_YES_LOWERCASE
+      CMP AL, ASCII_YES
       JZ MAIN_GO
 
-	INT 20h		
+INT 20h
 
 MAIN ENDP
 
 ; *******************************************************************************************************
 ; ****************************************
-; Set screen to mode 3 (80x25, color) and 
+; Set screen to mode 3 (80x25, color) and
 ; clears the screen
-; Entry: 
+; Entry:
 ;   -
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   Screen size: SCREEN_MAX_ROWS, SCREEN_MAX_COLS
 ; Calls:
 ;   int 10h, service AH=0
 ;   int 10h, service AH=6
 ; ****************************************
 PUBLIC INIT_SCREEN
-INIT_SCREEN	PROC NEAR
+INIT_SCREEN PROC NEAR
 
       PUSH AX
       PUSH BX
@@ -256,24 +254,26 @@ INIT_SCREEN	PROC NEAR
       MOV BH, 7
       MOV AH, 6
       INT 10h
-      
+     
       POP DX      
       POP CX      
       POP BX      
       POP AX      
-	RET
+RET
 
-INIT_SCREEN		ENDP
+INIT_SCREEN ENDP
 ; *******************************************************************************************************
 ; ****************************************
 ; Reset internal variables
-; Entry: 
-;   
+; Entry:
+;  
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
+;   INC_ROW memory variable
+;   INC_COL memory variable
 ;   DIV_SPEED memory variable
 ;   NUM_TILES memory variable
 ;   START_GAME memory variable
@@ -284,31 +284,32 @@ INIT_SCREEN		ENDP
                   PUBLIC  INIT_GAME
 INIT_GAME         PROC    NEAR
 
-    MOV [DIV_SPEED], 10
+    MOV [INC_ROW], 1
+    MOV [INC_COL], 3
 
-    MOV [NUM_TILES], 0
-    
+
+   
     MOV [START_GAME], FALSE
     MOV [END_GAME], FALSE
 
     RET
-INIT_GAME	ENDP	
+INIT_GAME ENDP
 ; *******************************************************************************************************
 ; ****************************************
 ; Reads char from keyboard
 ; If char is not available, blocks until a key is pressed
 ; The char is not output to screen
-; Entry: 
+; Entry:
 ;
 ; Returns:
 ;   AL: ASCII CODE
 ;   AH: ATTRIBUTE
 ; Modifies:
-;   
-; Uses: 
-;   
+;  
+; Uses:
+;  
 ; Calls:
-;   
+;  
 ; ****************************************
 PUBLIC  READ_CHAR
 READ_CHAR PROC NEAR
@@ -317,21 +318,21 @@ READ_CHAR PROC NEAR
     INT 21h
 
     RET
-      
+     
 READ_CHAR ENDP
 ; *******************************************************************************************************
 ; ANEM A DIBUIXAR EL CAMP
 ; ****************************************
 ; Draws the rectangular field of the game
-; Entry: 
-; 
+; Entry:
+;
 ; Returns:
-;   
+;  
 ; Modifies:
-;   
-; Uses: 
-;   Coordinates of the rectangle: 
-;    left - top: (FIELD_R1, FIELD_C1) 
+;  
+; Uses:
+;   Coordinates of the rectangle:
+;    left - top: (FIELD_R1, FIELD_C1)
 ;    right - bottom: (FIELD_R2, FIELD_C2)
 ;   Character: ASCII_FIELD
 ;   Attribute: ATTR_FIELD
@@ -385,31 +386,23 @@ DRAW_FIELD       ENDP
 ; *******************************************************************************************************
 ; FUNCIÃ“ PER PRINTAR UN CHAR ATTR
 ; ****************************************
-; Prints character and attribute in the 
-; current cursor position, page 0 
+; Prints character and attribute in the
+; current cursor position, page 0
 ; Keeps the cursor position
-; Entry: 
+; Entry:
 ;   AL: ASCII to print
 ;   BL: ATTRIBUTE to print
 ; Returns:
-;   
+;  
 ; Modifies:
-;   
-; Uses: 
+;  
+; Uses:
 ;
 ; Calls:
 ;   int 10h, service AH=9
 ; Nota:
 ;   Compatibility problem when debugging
 ; ****************************************
-
-; *******************************************************************************************************
-; ****************************************
-
-
-; *******************************************************************************************************
-; ****************************************
-
 
 ; *******************************************************************************************************
 ; ****************************************
@@ -430,21 +423,21 @@ PRINT_CHAR_ATTR PROC NEAR
     POP AX
     RET
 
-PRINT_CHAR_ATTR        ENDP 
+PRINT_CHAR_ATTR        ENDP
 
 ; ///////////////////////////////////////////
 
 ; *******************************************************************************************************
 ; ****************************************
 ; Get cursor properties: coordinates and size (page 0)
-; Entry: 
+; Entry:
 ;   -
 ; Returns:
 ;   (DH, DL): coordinates -> (row, col)
 ;   (CH, CL): cursor size
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   -
 ; Calls:
 ;   int 10h, service AH=3
@@ -462,19 +455,19 @@ GET_CURSOR_PROP PROC NEAR
       POP BX
       POP AX
       RET
-      
+     
 GET_CURSOR_PROP       ENDP
 ; *******************************************************************************************************
 ; ****************************************
 ; Set cursor properties: coordinates and size (page 0)
-; Entry: 
+; Entry:
 ;   (DH, DL): coordinates -> (row, col)
 ;   (CH, CL): cursor size
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   -
 ; Calls:
 ;   int 10h, service AH=2
@@ -492,20 +485,20 @@ SET_CURSOR_PROP PROC NEAR
       POP BX
       POP AX
       RET
-      
+     
 SET_CURSOR_PROP       ENDP
 
 ; *******************************************************************************************************
 ; ****************************************
 ; Move cursor to coordinate
 ; Cursor size if kept
-; Entry: 
+; Entry:
 ;   (DH, DL): coordinates -> (row, col)
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   -
 ; Calls:
 ;   GET_CURSOR_PROP
@@ -520,17 +513,17 @@ MOVE_CURSOR PROC NEAR
       CALL SET_CURSOR_PROP
       RET
 
-MOVE_CURSOR       ENDP 
+MOVE_CURSOR       ENDP
 ; *******************************************************************************************************
 ; ****************************************
-; Hides the cursor 
-; Entry: 
+; Hides the cursor
+; Entry:
 ;   -
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   -
 ; Calls:
 ;   int 10h, service AH=1
@@ -540,7 +533,7 @@ HIDE_CURSOR PROC NEAR
 
       PUSH AX
       PUSH CX
-      
+     
       MOV AH, 1
       MOV CX, CURSOR_SIZE_HIDE
       INT 10h
@@ -554,13 +547,13 @@ HIDE_CURSOR       ENDP
 ; PRINTAR LES BARRES DELS JUGADORS
 ; ****************************************
 ; Printar la posició actual de la barra 1
-; Entry: 
-; 
+; Entry:
+;
 ; Returns:
-;   
+;  
 ; Modifies:
-;   
-; Uses: 
+;  
+; Uses:
 ;   character: ASCII_BARRA1
 ;   attribute: ATTR_BARRA1
 ; Calls:
@@ -568,37 +561,51 @@ HIDE_CURSOR       ENDP
 ; ****************************************
 PUBLIC PRINT_BAR1
 PRINT_BAR1 PROC NEAR
-    MOV DH, POS_BAR1
-    MOV DL, 4 ; Ajustar la posició horitzontalment de les barres
+    MOV CX, 5                  ; Número de filas que ocupa la barra
+    MOV DH, POS_BAR1           ; Posición vertical inicial de la barra
+    MOV DL, 3                  ; Posición horizontal de la barra
+
+PRINT_BAR1_LOOP:
+    PUSH CX                    ; Guardar el contador de filas
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BARRA1
     CALL PRINT_CHAR_ATTR
+    POP CX                     ; Recuperar el contador de filas
+    INC DH                     ; Mover a la siguiente fila
+    LOOP PRINT_BAR1_LOOP       ; Repetir hasta que CX sea 0
     RET
-PRINT_BAR1 ENDP   
+PRINT_BAR1 ENDP
 
 ; ****************************************
 ; Printar la posicio actual de la barra 2
-; Entry: 
-; 
+; Entry:
+;
 ; Returns:
-;   
+;  
 ; Modifies:
-;   
-; Uses: 
+;  
+; Uses:
 ;   character: ASCII_BARRA2
 ;   attribute: ATTR_BARRA2
 ; Calls:
 ;   PRINT_CHAR_ATTR
 ; ****************************************
- PUBLIC PRINT_BAR2
- PRINT_BAR2 PROC NEAR
-    MOV DH, POS_BAR2
-    MOV DL, SCREEN_MAX_COLS - 4 ; Ajustar la posició horitzonal
+PUBLIC PRINT_BAR2
+PRINT_BAR2 PROC NEAR
+    MOV CX, 5                  ; Número de filas que ocupa la barra
+    MOV DH, POS_BAR2           ; Posición vertical inicial de la barra
+    MOV DL, SCREEN_MAX_COLS - 4 ; Posición horizontal de la barra
+
+PRINT_BAR2_LOOP:
+    PUSH CX                    ; Guardar el contador de filas
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA2
     MOV BL, ATTR_BARRA2
     CALL PRINT_CHAR_ATTR
+    POP CX                     ; Recuperar el contador de filas
+    INC DH                     ; Mover a la siguiente fila
+    LOOP PRINT_BAR2_LOOP       ; Repetir hasta que CX sea 0
     RET
 PRINT_BAR2 ENDP
 
@@ -606,13 +613,13 @@ PRINT_BAR2 ENDP
 ; PRINTAR ELS BLOCS DESTRUIBLES
 ; ****************************************
 ; Printar la posició del bloc
-; Entry: 
-; 
+; Entry:
+;
 ; Returns:
-;   
+;  
 ; Modifies:
-;   
-; Uses: 
+;  
+; Uses:
 ;   character: ASCII_BRICK
 ;   attribute: ATTR_BRICK
 ; Calls:
@@ -624,186 +631,186 @@ PRINT_BRICK PROC NEAR
     ;ATTR_BRICK_RED EQU 0C4h
     ;ATTR_BRICK_GREEN   EQU 020h
     ;ATTR_BRICK_YELLOW EQU 0ECh
-    
+   
 
 
-    MOV DH, SCREEN_MAX_ROWS / 2 
+    MOV DH, SCREEN_MAX_ROWS / 2
     MOV DL, SCREEN_MAX_COLS / 2 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_BLUE
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 4 
+    MOV DH, SCREEN_MAX_ROWS / 4
     MOV DL, 3 * SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 3 
+    MOV DH, 2 * SCREEN_MAX_ROWS / 3
     MOV DL, SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 3 
+    MOV DH, SCREEN_MAX_ROWS / 3
     MOV DL, SCREEN_MAX_COLS / 3 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_YELLOW
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 3 
+    MOV DH, 2 * SCREEN_MAX_ROWS / 3
     MOV DL, 2 * SCREEN_MAX_COLS / 3 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_YELLOW
     CALL PRINT_CHAR_ATTR
-    
-    MOV DH, SCREEN_MAX_ROWS / 5 
+ 
+    MOV DH, SCREEN_MAX_ROWS / 5
     MOV DL, 2 * SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_BLUE
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 3 
+    MOV DH, 2 * SCREEN_MAX_ROWS / 3
     MOV DL, 3 * SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 3 * SCREEN_MAX_ROWS / 4 
+    MOV DH, 3 * SCREEN_MAX_ROWS / 4
     MOV DL, SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 6 
+    MOV DH, SCREEN_MAX_ROWS / 6
     MOV DL, SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_YELLOW
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 4 
+    MOV DH, SCREEN_MAX_ROWS / 4
     MOV DL, SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_BLUE
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 5 
+    MOV DH, SCREEN_MAX_ROWS / 5
     MOV DL, SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
-
-    MOV DH, SCREEN_MAX_ROWS / 3 
+ 
+    MOV DH, SCREEN_MAX_ROWS / 3
     MOV DL, 2 * SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 5 
+    MOV DH, 2 * SCREEN_MAX_ROWS / 5
     MOV DL, 3 * SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_YELLOW
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 3 * SCREEN_MAX_ROWS / 6 
+    MOV DH, 3 * SCREEN_MAX_ROWS / 6
     MOV DL, SCREEN_MAX_COLS / 3 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_BLUE
     CALL PRINT_CHAR_ATTR
-
-    MOV DH, SCREEN_MAX_ROWS / 4 
+ 
+    MOV DH, SCREEN_MAX_ROWS / 4
     MOV DL, 3 * SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 3 
+    MOV DH, SCREEN_MAX_ROWS / 3
     MOV DL, 2 * SCREEN_MAX_COLS / 3 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 5 
+    MOV DH, 2 * SCREEN_MAX_ROWS / 5
     MOV DL, SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_YELLOW
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 3 * SCREEN_MAX_ROWS / 6 
+    MOV DH, 3 * SCREEN_MAX_ROWS / 6
     MOV DL, SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 5 
+    MOV DH, 4 * SCREEN_MAX_ROWS / 5
     MOV DL, 2 * SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 3 
+    MOV DH, 2 * SCREEN_MAX_ROWS / 3
     MOV DL, 3 * SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_BLUE
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 3 * SCREEN_MAX_ROWS / 4 
+    MOV DH, 3 * SCREEN_MAX_ROWS / 4
     MOV DL, SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 6 
+    MOV DH, SCREEN_MAX_ROWS / 6
     MOV DL, SCREEN_MAX_COLS / 4 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_YELLOW
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 4 
+    MOV DH, SCREEN_MAX_ROWS / 4
     MOV DL, SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 5 
-    MOV DL, SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
+    MOV DH, 2 * SCREEN_MAX_ROWS / 5
+    MOV DL, 4 * SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_BLUE
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, SCREEN_MAX_ROWS / 3 
+    MOV DH, SCREEN_MAX_ROWS / 3
     MOV DL, 2 * SCREEN_MAX_COLS / 5 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_RED
     CALL PRINT_CHAR_ATTR
 
-    MOV DH, 2 * SCREEN_MAX_ROWS / 5 
-    MOV DL, 3 * SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
+    MOV DH, 5 * SCREEN_MAX_ROWS / 7
+    MOV DL, 4 * SCREEN_MAX_COLS / 6 ; Ajustar la posició horitzontalment de les barres
     CALL MOVE_CURSOR
     MOV AL, ASCII_BARRA1
     MOV BL, ATTR_BRICK_GREEN
@@ -811,17 +818,520 @@ PRINT_BRICK PROC NEAR
 
     RET
 
-PRINT_BRICK      ENDP 
+PRINT_BRICK      ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Detectar colisión con los bloques para la pelota 1
+CHECK_BLOCK_COLLISION1 PROC NEAR
+    MOV AL, [POS_BALL1_ROW]
+    MOV BL, [POS_BALL1_COL]
+
+    ; Comparar con el bloque 1
+    CMP AL, [SCREEN_MAX_ROWS / 2]
+    JNE CHECK_BLOCK2_1
+    CMP BL, [SCREEN_MAX_COLS / 2]
+    JNE CHECK_BLOCK2_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK2_1:
+    ; Comparar con el bloque 2
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK3_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK3_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK3_1:
+    ; Comparar con el bloque 3
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK4_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK4_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK4_1:
+    ; Comparar con el bloque 4
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK5_1
+    CMP BL, [SCREEN_MAX_COLS / 3]
+    JE BLOCK_COLLISION1
+
+CHECK_BLOCK5_1:
+    ; Comparar con el bloque 5
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK6_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 3]
+    JNE CHECK_BLOCK6_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK6_1:
+    ; Comparar con el bloque 6
+    CMP AL, [SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK7_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK7_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK7_1:
+    ; Comparar con el bloque 7
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK8_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK8_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK8_1:
+    ; Comparar con el bloque 8
+    CMP AL, [3 * SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK9_1
+    CMP BL, [SCREEN_MAX_COLS / 5 ]
+    JNE CHECK_BLOCK9_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK9_1:
+    ; Comparar con el bloque 9
+    CMP AL, [SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK10_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK10_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK10_1:
+    ; Comparar con el bloque 10
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK11_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK11_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK11_1:
+    ; Comparar con el bloque 11
+    CMP AL, [SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK12_1
+    CMP BL, [SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK12_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK12_1:
+    ; Comparar con el bloque 12
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK13_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK13_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK13_1:
+    ; Comparar con el bloque 13
+    CMP AL, [2 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK14_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK14_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK14_1:
+    ; Comparar con el bloque 14
+    CMP AL, [3 * SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK15_1
+    CMP BL, [SCREEN_MAX_COLS / 3]
+    JNE CHECK_BLOCK15_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK15_1:
+    ; Comparar con el bloque 15
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK16_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK16_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK16_1:
+    ; Comparar con el bloque 16
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK17_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 3]
+    JNE CHECK_BLOCK17_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK17_1:
+    ; Comparar con el bloque 17
+    CMP AL, [2 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK18_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK18_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK18_1:
+    ; Comparar con el bloque 18
+    CMP AL, [3 * SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK19_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK19_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK19_1:
+    ; Comparar con el bloque 19
+    CMP AL, [4 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK20_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK20_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK20_1:
+    ; Comparar con el bloque 20
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK21_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK21_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK21_1:
+    ; Comparar con el bloque 21
+    CMP AL, [3 * SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK22_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK22_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK22_1:
+    ; Comparar con el bloque 22
+    CMP AL, [SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK23_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK23_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK23_1:
+    ; Comparar con el bloque 23
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK24_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK24_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK24_1:
+    ; Comparar con el bloque 24
+    CMP AL, [2 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK25_1
+    CMP BL, [4 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK25_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK25_1:
+    ; Comparar con el bloque 25
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK26_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK26_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK26_1:
+    ; Comparar con el bloque 26
+    CMP AL, [5 * SCREEN_MAX_ROWS / 7]
+    JNE NO_BLOCK_COLLISION1
+    CMP BL, [4 * SCREEN_MAX_COLS / 6]
+    JNE NO_BLOCK_COLLISION1
+    CALL DESTROY_BLOCK
+
+NO_BLOCK_COLLISION1:
+    RET
+
+BLOCK_COLLISION1:
+    ; Invertir dirección de la pelota 1 al colisionar con un bloque
+    NEG [DIRECTION1]
+    RET
+CHECK_BLOCK_COLLISION1 ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Detectar colisión con los bloques para la pelota 2
+CHECK_BLOCK_COLLISION2 PROC NEAR
+    MOV AL, [POS_BALL2_ROW]
+    MOV BL, [POS_BALL2_COL]
+
+    ; Comparar con el bloque 1
+    CMP AL, [SCREEN_MAX_ROWS / 2]
+    JNE CHECK_BLOCK2_1
+    CMP BL, [SCREEN_MAX_COLS / 2]
+    JNE CHECK_BLOCK2_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK2_1:
+    ; Comparar con el bloque 2
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK3_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK3_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK3_1:
+    ; Comparar con el bloque 3
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK4_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK4_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK4_1:
+    ; Comparar con el bloque 4
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK5_1
+    CMP BL, [SCREEN_MAX_COLS / 3]
+    JE BLOCK_COLLISION1
+
+CHECK_BLOCK5_1:
+    ; Comparar con el bloque 5
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK6_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 3]
+    JNE CHECK_BLOCK6_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK6_1:
+    ; Comparar con el bloque 6
+    CMP AL, [SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK7_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK7_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK7_1:
+    ; Comparar con el bloque 7
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK8_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK8_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK8_1:
+    ; Comparar con el bloque 8
+    CMP AL, [3 * SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK9_1
+    CMP BL, [SCREEN_MAX_COLS / 5 ]
+    JNE CHECK_BLOCK9_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK9_1:
+    ; Comparar con el bloque 9
+    CMP AL, [SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK10_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK10_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK10_1:
+    ; Comparar con el bloque 10
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK11_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK11_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK11_1:
+    ; Comparar con el bloque 11
+    CMP AL, [SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK12_1
+    CMP BL, [SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK12_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK12_1:
+    ; Comparar con el bloque 12
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK13_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK13_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK13_1:
+    ; Comparar con el bloque 13
+    CMP AL, [2 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK14_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK14_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK14_1:
+    ; Comparar con el bloque 14
+    CMP AL, [3 * SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK15_1
+    CMP BL, [SCREEN_MAX_COLS / 3]
+    JNE CHECK_BLOCK15_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK15_1:
+    ; Comparar con el bloque 15
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK16_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK16_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK16_1:
+    ; Comparar con el bloque 16
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK17_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 3]
+    JNE CHECK_BLOCK17_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK17_1:
+    ; Comparar con el bloque 17
+    CMP AL, [2 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK18_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK18_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK18_1:
+    ; Comparar con el bloque 18
+    CMP AL, [3 * SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK19_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK19_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK19_1:
+    ; Comparar con el bloque 19
+    CMP AL, [4 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK20_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK20_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK20_1:
+    ; Comparar con el bloque 20
+    CMP AL, [2 * SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK21_1
+    CMP BL, [3 * SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK21_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK21_1:
+    ; Comparar con el bloque 21
+    CMP AL, [3 * SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK22_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK22_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK22_1:
+    ; Comparar con el bloque 22
+    CMP AL, [SCREEN_MAX_ROWS / 6]
+    JNE CHECK_BLOCK23_1
+    CMP BL, [SCREEN_MAX_COLS / 4]
+    JNE CHECK_BLOCK23_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK23_1:
+    ; Comparar con el bloque 23
+    CMP AL, [SCREEN_MAX_ROWS / 4]
+    JNE CHECK_BLOCK24_1
+    CMP BL, [SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK24_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK24_1:
+    ; Comparar con el bloque 24
+    CMP AL, [2 * SCREEN_MAX_ROWS / 5]
+    JNE CHECK_BLOCK25_1
+    CMP BL, [4 * SCREEN_MAX_COLS / 6]
+    JNE CHECK_BLOCK25_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK25_1:
+    ; Comparar con el bloque 25
+    CMP AL, [SCREEN_MAX_ROWS / 3]
+    JNE CHECK_BLOCK26_1
+    CMP BL, [2 * SCREEN_MAX_COLS / 5]
+    JNE CHECK_BLOCK26_1
+    CALL DESTROY_BLOCK
+    JMP BLOCK_COLLISION1
+
+CHECK_BLOCK26_1:
+    ; Comparar con el bloque 26
+    CMP AL, [5 * SCREEN_MAX_ROWS / 7]
+    JNE NO_BLOCK_COLLISION1
+    CMP BL, [4 * SCREEN_MAX_COLS / 6]
+    JNE NO_BLOCK_COLLISION1
+    CALL DESTROY_BLOCK
+
+NO_BLOCK_COLLISION1:
+    RET
+
+BLOCK_COLLISION1:
+    ; Invertir dirección de la pelota 1 al colisionar con un bloque
+    NEG [DIRECTION1]
+    RET
+CHECK_BLOCK_COLLISION2 ENDP
+
+; *******************************************************************************************************
+; ****************************************
+; Función para destruir el bloque
+DESTROY_BLOCK PROC NEAR
+    MOV AL, ' ' ; Carácter de espacio para destruir el bloque
+    MOV BL, 0   ; Atributo para el carácter de espacio
+    CALL PRINT_CHAR_ATTR
+    RET
+DESTROY_BLOCK ENDP
+
 ; *******************************************************************************************************
 ; ****************************************
 ; Shows the cursor (standard size)
-; Entry: 
+; Entry:
 ;   -
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   -
 ; Calls:
 ;   int 10h, service AH=1
@@ -831,7 +1341,7 @@ SHOW_CURSOR PROC NEAR
 
     PUSH AX
     PUSH CX
-      
+     
     MOV AH, 1
     MOV CX, CURSOR_SIZE_SHOW
     INT 10h
@@ -840,18 +1350,18 @@ SHOW_CURSOR PROC NEAR
     POP AX
     RET
 
-SHOW_CURSOR       ENDP   
+SHOW_CURSOR       ENDP  
 ; *******************************************************************************************************
 ; ****************************************
 ; Print the score string, starting in the cursor
 ; (FIELD_C1, FIELD_R2) coordinate
-; Entry: 
+; Entry:
 ;   DX: pointer to string
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   SCORE_STR
 ;   FIELD_C1
 ;   FIELD_R2
@@ -881,16 +1391,16 @@ PRINT_SCORE_STRING PROC NEAR
 PRINT_SCORE_STRING       ENDP
 ; *******************************************************************************************************
 ; ****************************************
-; Prints the score of the player in decimal, on the screen, 
+; Prints the score of the player in decimal, on the screen,
 ; starting in the cursor position
 ; NUM_TILES range: [0, 9999]
-; Entry: 
+; Entry:
 ;   -
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   NUM_TILES memory variable
 ; Calls:
 ;   PRINT_CHAR
@@ -902,14 +1412,6 @@ PRINT_SCORE PROC NEAR
     PUSH BX
     PUSH CX
     PUSH DX
-
-    ; 1000'
-    MOV AX, [NUM_TILES]
-    XOR DX, DX
-    MOV BX, 1000
-    DIV BX            ; DS:AX / BX -> AX: quotient, DX: remainder
-    ADD AL, ASCII_NUMBER_ZERO
-    CALL PRINT_CHAR
 
     ; 100'
     MOV AX, DX        ; Remainder
@@ -936,20 +1438,20 @@ PRINT_SCORE PROC NEAR
     POP CX
     POP BX
     POP AX
-    RET   
+    RET  
          
 PRINT_SCORE        ENDP
 ; *******************************************************************************************************
 ; ****************************************
 ; Print the score string, starting in the
 ; current cursor coordinate
-; Entry: 
+; Entry:
 ;   -
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   PLAY_AGAIN_STR
 ;   FIELD_C1
 ;   FIELD_R2
@@ -971,13 +1473,13 @@ PRINT_PLAY_AGAIN_STRING       ENDP
 ; *******************************************************************************************************
 ; ****************************************
 ; Restore timer ISR
-; Entry: 
+; Entry:
 ;   -
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   OLD_INTERRUPT_BASE memory variable
 ; Calls:
 ;   int 21h, service AH=25 (system interrupt 08)
@@ -985,12 +1487,12 @@ PRINT_PLAY_AGAIN_STRING       ENDP
 PUBLIC RESTORE_TIMER_INTERRUPT
 RESTORE_TIMER_INTERRUPT PROC NEAR
 
-      PUSH AX                             
+      PUSH AX                            
       PUSH DS
-      PUSH DX 
+      PUSH DX
 
       CLI                                 ;Disable Ints
-        
+       
       ;Restore 08h ISR
       MOV  AX, 2508h                      ;MS-DOS service 25h, ISR 08h
       MOV  DX, WORD PTR OLD_INTERRUPT_BASE
@@ -999,24 +1501,24 @@ RESTORE_TIMER_INTERRUPT PROC NEAR
 
       STI                                 ;Re-enable interrupts
 
-      POP  DX                             
+      POP  DX                            
       POP  DS
       POP  AX
       RET    
-      
+     
 RESTORE_TIMER_INTERRUPT ENDP
 ; *******************************************************************************************************
 ; ****************************************
-; Prints character and attribute in the 
-; current cursor position, page 0 
+; Prints character and attribute in the
+; current cursor position, page 0
 ; Cursor moves one position right
-; Entry: 
+; Entry:
 ;    AL: ASCII code to print
 ; Returns:
-;   
+;  
 ; Modifies:
-;   
-; Uses: 
+;  
+; Uses:
 ;
 ; Calls:
 ;   int 21h, service AH=2
@@ -1035,18 +1537,18 @@ PRINT_CHAR PROC NEAR
     POP AX
     RET
 
-PRINT_CHAR        ENDP   
+PRINT_CHAR        ENDP  
 ; *******************************************************************************************************
 ; ****************************************
 ; Print string to screen
 ; The string end character is '$'
-; Entry: 
+; Entry:
 ;   DX: pointer to string
 ; Returns:
 ;   -
 ; Modifies:
 ;   -
-; Uses: 
+; Uses:
 ;   SCREEN_MAX_COLS
 ; Calls:
 ;   INT 21h, service AH=9
@@ -1055,7 +1557,7 @@ PUBLIC PRINT_STRING
 PRINT_STRING PROC NEAR
 
     PUSH DX
-      
+     
     MOV AH,9
     INT 21h
 
@@ -1064,300 +1566,347 @@ PRINT_STRING PROC NEAR
 
 PRINT_STRING       ENDP
 ; *******************************************************************************************************
-; Iniciar posicions de les pilotes
+; Inicialización de las pelotas
 PUBLIC INIT_BALLS
 INIT_BALLS PROC NEAR
     MOV POS_BALL1_ROW, SCREEN_MAX_ROWS / 2
     MOV POS_BALL1_COL, SCREEN_MAX_COLS - 75
-    
+   
     MOV POS_BALL2_ROW, SCREEN_MAX_ROWS / 2
-    MOV POS_BALL2_COL, SCREEN_MAX_COLS - 5 ; Separar les pilotes una mica
+    MOV POS_BALL2_COL, SCREEN_MAX_COLS - 5 ; Separar las pelotas un poco
     RET
 INIT_BALLS ENDP
-; *******************************************************************************************************
-; Dibujar pelotas
-PUBLIC DRAW_BALLS
-DRAW_BALLS PROC NEAR
-    PUSH AX
-    PUSH BX
-    PUSH DX
 
-    ; Dibuixar pelota 1
-    MOV DH, POS_BALL1_ROW
-    MOV DL, POS_BALL1_COL
-    CALL MOVE_CURSOR
-    MOV AL, ASCII_BALL
-    MOV BL, ATTR_BALL
-    CALL PRINT_CHAR_ATTR
 
-    ; Dibuixar pilota 2
-    MOV DH, POS_BALL2_ROW
-    MOV DL, POS_BALL2_COL
-    CALL MOVE_CURSOR
-    MOV AL, ASCII_BALL2
-    MOV BL, ATTR_BALL2
-    CALL PRINT_CHAR_ATTR
-
-    POP DX
-    POP BX
-    POP AX
-    RET
-DRAW_BALLS ENDP
-; *******************************************************************************************************
-; Fer que es moguin les pilotes
 PUBLIC MOVE_BALLS
 MOVE_BALLS PROC NEAR
-    ; Mover la primera pelota en la dirección especificada (horizontal)
-    MOV DL, POS_BALL1_COL  ; Cargar la columna actual de la primera pelota en DL
-    ADD DL, DIRECTION1     ; Sumar la dirección actual a la columna actual
-    MOV POS_BALL1_COL, DL  ; Guardar la nueva columna de la primera pelota
+    CALL CLEAR_BALLS
 
-    ; No mover la fila de la primera pelota (solo horizontal)
-    MOV DH, POS_BALL1_ROW  ; Cargar la fila actual de la primera pelota en DH
-    ADD DH, DIRECTION2     ; Sumar la dirección actual a la fila actual
-    MOV POS_BALL1_ROW, DH  ; Guardar la nueva fila de la primera pelota
+    ; Movimiento de la primera pelota
+    CALL MOVE_BALL1
+    ; Movimiento de la segunda pelota
+    CALL MOVE_BALL2
 
-    ; Mover la segunda pelota en la dirección especificada (horizontal)
-    MOV DL, POS_BALL2_COL  ; Cargar la columna actual de la segunda pelota en DL
-    ADD DL, DIRECTION3     ; Sumar la dirección actual a la columna actual
-    MOV POS_BALL2_COL, DL  ; Guardar la nueva columna de la segunda pelota
-
-    ; No mover la fila de la segunda pelota (solo horizontal)
-    MOV DH, POS_BALL2_ROW  ; Cargar la fila actual de la segunda pelota en DH
-    ADD DH, DIRECTION4     ; Sumar la dirección actual a la fila actual
-    MOV POS_BALL2_ROW, DH  ; Guardar la nueva fila de la segunda pelota
+MOVE_BALLS_END:
+    CALL DRAW_BALLS
+    CALL DELAY
 
     RET
 MOVE_BALLS ENDP
 
-; ****************************************
-; Read character and attribute at cursor position, page 0
-; Entry: 
-;
-; Returns:
-;   AL: ASCII CODE
-;   AH: ATTRIBUTE
-; Modifies:
-;   
-; Uses: 
-;   
-; Calls:
-;   int 10h, service AH=8
-; ****************************************
-PUBLIC READ_SCREEN_CHAR                 
-READ_SCREEN_CHAR PROC NEAR
+MOVE_BALL1 PROC NEAR
+    ; Mover la pelota 1 horizontalmente
+    MOV DL, [POS_BALL1_COL]
+    ADD DL, [DIRECTION1]
+    CALL CHECK_BAR_COLLISION1   ; Comprobar colisión con la barra 1
+    CALL CHECK_BAR_COLLISION2   ; Comprobar colisión con la barra 2
+    CALL CHECK_BLOCK_COLLISION1
+    CMP DL, 0
+    JGE CHECK_RIGHT_LIMIT1
+    MOV DL, 1
+    NEG [DIRECTION1]
+    JMP UPDATE_BALL1_POS
 
-    PUSH BX
+CHECK_RIGHT_LIMIT1:
+    CMP DL, SCREEN_MAX_COLS - 1
+    JL CHECK_LEFT_LIMIT1
+    MOV DL, SCREEN_MAX_COLS - 2
+    NEG [DIRECTION1]
 
-    MOV AH, 8
-    XOR BH, BH
-    INT 10h
+CHECK_LEFT_LIMIT1:
+    CMP DL, 2
+    JGE UPDATE_BALL1_POS
+    MOV DL, 1
+    NEG [DIRECTION1]
 
-    POP BX
+UPDATE_BALL1_POS:
+    MOV [POS_BALL1_COL], DL
+
+    ; Mover la pelota 1 verticalmente
+    MOV DH, [POS_BALL1_ROW]
+    ADD DH, [DIRECTION2]
+    CMP DH, 0
+    JGE CHECK_TOP_LIMIT1
+    MOV DH, 1
+    NEG [DIRECTION2]
+    JMP UPDATE_BALL1_ROW
+
+CHECK_TOP_LIMIT1:
+    CMP DH, 1
+    JGE CHECK_BOTTOM_LIMIT1
+    MOV DH, 1
+    NEG [DIRECTION2]
+
+CHECK_BOTTOM_LIMIT1:
+    CMP DH, SCREEN_MAX_ROWS - 1
+    JL UPDATE_BALL1_ROW
+    MOV DH, SCREEN_MAX_ROWS - 2
+    NEG [DIRECTION2]
+
+UPDATE_BALL1_ROW:
+    MOV [POS_BALL1_ROW], DH
     RET
-      
-READ_SCREEN_CHAR  ENDP
+MOVE_BALL1 ENDP
 
-; ****************************************
-; Game timer interrupt service routine
-; Called 18.2 times per second by the operating system
-; Calls previous ISR
-; Manages the movement of the snake: 
-;   position, direction, speed, length, display, collisions
-; Entry: 
-;   -
-; Returns:
-;   -
-; Modifies:
-;   -
-; Uses: 
-;   OLD_INTERRUPT_BASE memory variable
-;   START_GAME memory variable
-;   END_GAME memory variable
-;   INT_COUNT memory variable
-;   DIV_SPEED memory variable
-;   INC_COL memory variable
-;   INC_ROW memory variable
-;   ATTR_SNAKE constant
-;   NUM_TILES memory variable
-;   NUM_TILES_INC_SPEED
-; Calls:
-;   MOVE_CURSOR
-;   READ_SCREEN_CHAR
-;   PRINT_SNAKE
-; ****************************************
-PUBLIC NEW_TIMER_INTERRUPT
-NEW_TIMER_INTERRUPT PROC NEAR
+MOVE_BALL2 PROC NEAR
+    ; Mover la pelota 2 horizontalmente
+    MOV DL, [POS_BALL2_COL]
+    ADD DL, [DIRECTION3]
+    CALL CHECK_BAR_COLLISION3   ; Comprobar colisión con la barra 1
+    CALL CHECK_BAR_COLLISION4   ; Comprobar colisión con la barra 2
+    CALL CHECK_BLOCK_COLLISION2
+    CMP DL, 0
+    JGE CHECK_RIGHT_LIMIT2
+    MOV DL, 1
+    NEG [DIRECTION3]
+    JMP UPDATE_BALL2_POS
 
-    ; Call previous interrupt
-    PUSHF
-    CALL DWORD PTR [OLD_INTERRUPT_BASE]
+CHECK_RIGHT_LIMIT2:
+    CMP DL, SCREEN_MAX_COLS - 1
+    JL CHECK_LEFT_LIMIT2
+    MOV DL, SCREEN_MAX_COLS - 2
+    NEG [DIRECTION3]
 
-    PUSH AX
+CHECK_LEFT_LIMIT2:
+    CMP DL, 2
+    JGE UPDATE_BALL2_POS
+    MOV DL, 1
+    NEG [DIRECTION3]
 
-    ; Do nothing if game is stopped
-    CMP [START_GAME], TRUE
-    JNZ END_ISR
+UPDATE_BALL2_POS:
+    MOV [POS_BALL2_COL], DL
 
-    ; Increment INC_COUNT and check if worm position must be updated (INT_COUNT == DIV_COUNT)
-    INC [INT_COUNT]
-    MOV AL, [INT_COUNT]
-    CMP [DIV_SPEED], AL
-    JNZ END_ISR
-    MOV [INT_COUNT], 0
+    ; Mover la pelota 2 verticalmente
+    MOV DH, [POS_BALL2_ROW]
+    ADD DH, [DIRECTION4]
+    CMP DH, 0
+    JGE CHECK_TOP_LIMIT2
+    MOV DH, 1
+    NEG [DIRECTION4]
+    JMP UPDATE_BALL2_ROW
 
-    ; Load worm coordinates
-    ADD DL, [INC_COL]
-    ADD DH, [INC_ROW]
+CHECK_TOP_LIMIT2:
+    CMP DH, 1
+    JGE CHECK_BOTTOM_LIMIT2
+    MOV DH, 1
+    NEG [DIRECTION4]
 
-    ; Move snake on the screen
-    CALL MOVE_CURSOR
+CHECK_BOTTOM_LIMIT2:
+    CMP DH, SCREEN_MAX_ROWS - 1
+    JL UPDATE_BALL2_ROW
+    MOV DH, SCREEN_MAX_ROWS - 2
+    NEG [DIRECTION4]
 
-    ; Comprovar si la bola 1 colisiona amb el jugador o amb un bloc
-    CALL READ_SCREEN_CHAR
-    CMP AH, ATTR_BALL1
-    CALL DESTROY_BLOCK
-
-    ; Comprovar si la bola 2 colisiona amb el jugador o amb un bloc
-    CALL READ_SCREEN_CHAR
-    MOV AH, [ATTR_BRICK_BLUE]
-    CMP AH, ATTR_BALL2
-    CALL DESTROY_BLOCK 
+UPDATE_BALL2_ROW:
+    MOV [POS_BALL2_ROW], DH
+    RET
+MOVE_BALL2 ENDP
 
 
-    ; Increment the length of the snake
-    INC [NUM_TILES]
-    CALL PRINT_SNAKE
+; Detectar colisión con cualquier barra para la pelota 1
+CHECK_BAR_COLLISION1 PROC NEAR
+    ; Obtener la posición actual de la pelota 1
+    MOV AL, [POS_BALL1_ROW]
+    MOV BL, [POS_BALL1_COL]
 
-    ; Check if it is time to increase the speed of the snake
-    CMP [DIV_SPEED], 1
-    JZ END_ISR
-    MOV AX, [NUM_TILES]
-    DIV [NUM_TILES_INC_SPEED]
-    CMP AH, 0                 ; REMAINDER
-    JNZ END_ISR
-    DEC [DIV_SPEED]
+    ; Verificar colisión con la barra 1
+    CMP BL, 5                            ; Comparar columna de la pelota con la posición de la barra
+    JNE NO_COLLISION1                    ; Si la pelota no está en la misma columna que la barra, no hay colisión
+    CMP AL, [POS_BAR1]                   ; Comparar fila de la pelota con la posición superior de la barra
+    JB NO_COLLISION1                     ; Si la pelota está por encima de la barra, no hay colisión
+    CMP AL, [POS_BAR1 + BAR_SIZE - 1]    ; Comparar fila de la pelota con la posición inferior de la barra
+    JAE NO_COLLISION1                    ; Si la pelota está por debajo de la barra, no hay colisión
 
-    JMP END_ISR
-      
-END_SNAKES:
-      MOV [END_GAME], TRUE
-      
-END_ISR:
+    ; Si la pelota está en la misma columna y dentro del rango de la barra, invertir la dirección horizontal
+    NEG [DIRECTION1]
 
-      POP AX
-      IRET
-
-NEW_TIMER_INTERRUPT ENDP
-
-; ****************************************
-; Replaces current timer ISR with the game timer ISR
-; Entry: 
-;   -
-; Returns:
-;   -
-; Modifies:
-;   -
-; Uses: 
-;   OLD_INTERRUPT_BASE memory variable
-;   NEW_TIMER_INTERRUPT memory variable
-; Calls:
-;   int 21h, service AH=35 (system interrupt 08)
-; ****************************************
-PUBLIC REGISTER_TIMER_INTERRUPT
-REGISTER_TIMER_INTERRUPT PROC NEAR
-
-        PUSH AX
-        PUSH BX
-        PUSH DS
-        PUSH ES 
-
-        CLI                                 ;Disable Ints
-        
-        ;Get current 01CH ISR segment:offset
-        MOV  AX, 3508h                      ;Select MS-DOS service 35h, interrupt 08h
-        INT  21h                            ;Get the existing ISR entry for 08h
-        MOV  WORD PTR OLD_INTERRUPT_BASE+02h, ES  ;Store Segment 
-        MOV  WORD PTR OLD_INTERRUPT_BASE, BX  ;Store Offset
-
-        ;Set new 01Ch ISR segment:offset
-        MOV  AX, 2508h                      ;MS-DOS serivce 25h, IVT entry 01Ch
-        MOV  DX, offset NEW_TIMER_INTERRUPT ;Set the offset where the new IVT entry should point to
-        INT  21h                            ;Define the new vector
-
-        STI                                 ;Re-enable interrupts
-
-        POP  ES                             ;Restore interrupts
-        POP  DS
-        POP  BX
-        POP  AX
-        RET      
-
-REGISTER_TIMER_INTERRUPT ENDP
-
-; ****************************************
-; Destrueix un bloc
-; Entry: 
-;   -
-; Returns:
-;   -
-; Modifies:
-;   -
-; Uses: 
-;   OLD_INTERRUPT_BASE memory variable
-;   NEW_TIMER_INTERRUPT memory variable
-; Calls:
-;   int 21h, service AH=35 (system interrupt 08)
-; ****************************************
-PUBLIC DESTROY_BRICKS
-DESTROY_BRICKS PROC NEAR
+NO_COLLISION1:
+    RET
+CHECK_BAR_COLLISION1 ENDP
 
 
-DESTROY_BRICKS ENDP
+CHECK_BAR_COLLISION2 PROC NEAR
+    ; Obtener la posición actual de la pelota 1
+    MOV AL, [POS_BALL1_ROW]
+    MOV BL, [POS_BALL1_COL]
+
+    ; Verificar colisión con la barra 2
+    CMP BL, SCREEN_MAX_COLS - 6         ; Comparar columna de la pelota 1 con la posición de la barra 2
+    JNE NO_COLLISION2                   ; Si la pelota 1 no está en la misma columna que la barra 2, no hay colisión
+    CMP AL, [POS_BAR2]                  ; Comparar fila de la pelota 1 con la posición superior de la barra 2
+    JB NO_COLLISION2                    ; Si la pelota 1 está por encima de la barra 2, no hay colisión
+    CMP AL, [POS_BAR2 + BAR_SIZE - 1]   ; Comparar fila de la pelota 1 con la posición inferior de la barra 2
+    JAE NO_COLLISION2                   ; Si la pelota 1 está por debajo de la barra 2, no hay colisión
+
+    ; Si la pelota 1 está en la misma columna y dentro del rango de la barra 2, invertir la dirección horizontal de la pelota 1
+    NEG [DIRECTION1]
+
+NO_COLLISION2:
+    RET
+CHECK_BAR_COLLISION2 ENDP
+
+
+; Detectar colisión con cualquier barra para la pelota 2
+CHECK_BAR_COLLISION3 PROC NEAR
+    ; Obtener la posición actual de la pelota 2
+    MOV AL, [POS_BALL2_ROW]
+    MOV BL, [POS_BALL2_COL]
+
+    ; Verificar colisión con la barra 1
+    CMP BL, 5                            ; Comparar columna de la pelota con la posición de la barra
+    JNE NO_COLLISION1                    ; Si la pelota no está en la misma columna que la barra, no hay colisión
+    CMP AL, [POS_BAR1]                   ; Comparar fila de la pelota con la posición superior de la barra
+    JB NO_COLLISION1                     ; Si la pelota está por encima de la barra, no hay colisión
+    CMP AL, [POS_BAR1 + BAR_SIZE - 1]    ; Comparar fila de la pelota con la posición inferior de la barra
+    JAE NO_COLLISION1                    ; Si la pelota está por debajo de la barra, no hay colisión
+
+    ; Si la pelota está en la misma columna y dentro del rango de la barra, invertir la dirección horizontal
+    NEG [DIRECTION3]
+
+NO_COLLISION1:
+    RET
+CHECK_BAR_COLLISION3 ENDP
+
+
+CHECK_BAR_COLLISION4 PROC NEAR
+    ; Obtener la posición actual de la pelota 2
+    MOV AL, [POS_BALL2_ROW]
+    MOV BL, [POS_BALL2_COL]
+
+    ; Verificar colisión con la barra 2
+    CMP BL, SCREEN_MAX_COLS - 6         ; Comparar columna de la pelota 1 con la posición de la barra 2
+    JNE NO_COLLISION2                   ; Si la pelota 1 no está en la misma columna que la barra 2, no hay colisión
+    CMP AL, [POS_BAR2]                  ; Comparar fila de la pelota 1 con la posición superior de la barra 2
+    JB NO_COLLISION2                    ; Si la pelota 1 está por encima de la barra 2, no hay colisión
+    CMP AL, [POS_BAR2 + BAR_SIZE - 1]   ; Comparar fila de la pelota 1 con la posición inferior de la barra 2
+    JAE NO_COLLISION2                   ; Si la pelota 1 está por debajo de la barra 2, no hay colisión
+
+    ; Si la pelota está en la misma columna y dentro del rango de la barra, invertir la dirección horizontal
+    NEG [DIRECTION3]
+
+NO_COLLISION2:
+    RET
+CHECK_BAR_COLLISION4 ENDP
+
+
+; Dibujar las pelotas
+PUBLIC DRAW_BALLS
+DRAW_BALLS PROC NEAR
+    ; Dibujar la primera pelota
+    MOV DH, POS_BALL1_ROW
+    MOV DL, POS_BALL1_COL
+    MOV AH, 02H
+    INT 10H
+    MOV AH, 09H
+    MOV AL, 'O' ; Carácter de la pelota
+    MOV BH, 0
+    MOV CX, 1
+    INT 10H
+
+    ; Dibujar la segunda pelota
+    MOV DH, POS_BALL2_ROW
+    MOV DL, POS_BALL2_COL
+    MOV AH, 02H
+    INT 10H
+    MOV AH, 09H
+    MOV AL, 'O' ; Carácter de la pelota
+    MOV BH, 0
+    MOV CX, 1
+    INT 10H
+
+    RET
+DRAW_BALLS ENDP
+
+; Limpiar las pelotas
+PUBLIC CLEAR_BALLS
+CLEAR_BALLS PROC NEAR
+    ; Limpiar la primera pelota
+    MOV DH, POS_BALL1_ROW
+    MOV DL, POS_BALL1_COL
+    MOV AH, 02H
+    INT 10H
+    MOV AH, 09H
+    MOV AL, ' ' ; Carácter para limpiar la pelota
+    MOV BH, 0
+    MOV CX, 1
+    INT 10H
+
+    ; Limpiar la segunda pelota
+    MOV DH, POS_BALL2_ROW
+    MOV DL, POS_BALL2_COL
+    MOV AH, 02H
+    INT 10H
+    MOV AH, 09H
+    MOV AL, ' ' ; Carácter para limpiar la pelota
+    MOV BH, 0
+    MOV CX, 1
+    INT 10H
+
+    RET
+CLEAR_BALLS ENDP
+
+
+; Función de retardo
+
+; Subrutina para un pequeño delay
+SMALL_DELAY PROC NEAR
+    MOV CX, 0FFFFh ; Ajusta este valor para cambiar la duración del delay
+DELAY_LOOP:
+    LOOP DELAY_LOOP
+    RET
+SMALL_DELAY ENDP
+
+PUBLIC DELAY
+DELAY PROC NEAR
+    MOV CX, 0FFFFh ; Un valor alto para CX
+DELAY_LOOP:
+    DEC CX
+    JNZ DELAY_LOOP
+    RET
+DELAY ENDP
+   
 CODE_SEG ENDS
 
 ; *************************************************************************
 ; The data starts here
 ; *************************************************************************
-DATA_SEG	SEGMENT	PUBLIC
+DATA_SEG SEGMENT PUBLIC
     ; DEFINE YOUR MEMORY HERE
-	DATA		DB 20 DUP (0)
+DATA DB 20 DUP (0)
 OLD_INTERRUPT_BASE    DW  0, 0  ; Stores the current (system) timer ISR address
 
+    ; (INC_ROW. INC_COL) may be (-1, 0, 1), and determine the direction of movement of the snake
     INC_ROW DB 0    
     INC_COL DB 0
 
-    NUM_TILES DW 0              ; SNAKE LENGTH
-    NUM_TILES_INC_SPEED DB 20   ; THE SPEED IS INCREASED EVERY 'NUM_TILES_INC_SPEED'
-    
-    DIV_SPEED DB 10             ; THE SNAKE SPEED IS THE (INTERRUPT FREQUENCY) / DIV_SPEED
+
     INT_COUNT DB 0              ; 'INT_COUNT' IS INCREASED EVERY INTERRUPT CALL, AND RESET WHEN IT ACHIEVES 'DIV_SPEED'
 
     START_GAME DB 0             ; 'MAIN' sets START_GAME to '1' when a key is pressed
     END_GAME DB 0               ; 'NEW_TIMER_INTERRUPT' sets END_GAME to '1' when a condition to end the game happens
 
     SCORE_STR           DB "Your score is $"
-    PLAY_AGAIN_STR      DB ". Do you want to play again? (Y/N)$"
+    PLAY_AGAIN_STR      DB ". Do you want to play again? (SPACE/7)$"
 
-    POS_BAR1 DB SCREEN_MAX_ROWS - 4   ; Posició inicial de la barra del jugador 1
+    POS_BAR1 DB SCREEN_MAX_ROWS - 8   ; Posició inicial de la barra del jugador 1
     POS_BAR2 DB 3   ; Posició inicial de la barra del jugador 2
 
-    ; Declaració variables per la pilota 1
-    POS_BALL1_ROW DB 0 ; Posició inicial a la fila de la pilota 1
-    POS_BALL1_COL DB 0 ; Posició inicial a la columna de la pilota 1
-    DIRECTION1 DB 0; Direcció 1 en la qual surt la pilota
-    DIRECTION2 DB 3; Direcció 2 en la qual surt la pilota
-    
-    ; Declaració variables per la pilota 2
-    POS_BALL2_ROW DB 0 ; Posició inicial a la fila de la pilota 2
-    POS_BALL2_COL DB 0 ; Posició inicial a la columna de la pilota 2
-    DIRECTION3 DB 0; Direcció 1 en la qual surt la pilota 2
-    DIRECTION4 DB -3; Direcció 2 en la qual surt la pilota 2
-DATA_SEG	ENDS
+   ; Declaración de variables para la pelota 1
+    POS_BALL1_ROW DB 0 ; Posición inicial en la fila de la pelota 1
+    POS_BALL1_COL DB 0 ; Posición inicial en la columna de la pelota 1
+    DIRECTION1 DB 1     ; Dirección horizontal para la pelota 1 (1 = derecha, -1 = izquierda)
+    DIRECTION2 DB 1     ; Dirección vertical para la pelota 1 (por ejemplo, 1 para abajo)
+
+    ; Declaración de variables para la pelota 2
+    POS_BALL2_ROW DB 0 ; Posición inicial en la fila de la pelota 2
+    POS_BALL2_COL DB 0 ; Posición inicial en la columna de la pelota 2
+    DIRECTION3 DB -1     ; Dirección horizontal para la pelota 2 (1 = derecha, -1 = izquierda)
+    DIRECTION4 DB -1    ; Dirección vertical para la pelota 2 (por ejemplo, -1 para arriba)
+
+    ATTR_BG db 0 ; Define ATTR_BG como una variable de un byte con valor inicial 0
+DATA_SEG ENDS
 
 END MAIN
-
-
   
         
 
